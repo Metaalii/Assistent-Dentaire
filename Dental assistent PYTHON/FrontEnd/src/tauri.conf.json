@@ -1,0 +1,22 @@
+{
+  "tauri": {
+    "bundle": {
+      "externalBin": [
+        "dental-backend"
+      ]
+    },
+    "allowlist": {
+      "shell": {
+        "all": false,
+        "execute": false,
+        "sidecar": true,
+        "scope": [
+          {
+            "name": "dental-backend",
+            "sidecar": true
+          }
+        ]
+      }
+    }
+  }
+}

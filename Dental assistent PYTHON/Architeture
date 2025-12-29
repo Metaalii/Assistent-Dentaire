@@ -1,0 +1,23 @@
+medical-assistant/
+│
+├── frontend/              # Tauri
+│   ├── src/
+│   └── tauri.conf.json
+│
+├── backend/               # Python
+│   ├── app/
+│   │   ├── main.py        # API HTTP locale
+│   │   ├── llm/
+│   │   │   ├── local_llm.py
+│   │   │   └── whisper.py
+│   │   ├── api/
+│   │   │   ├── transcribe.py
+│   │   │   └── summarize.py
+│   │   └── config.py
+│   └── requirements.txt
+│
+├── models/                # MODELS LOCAUX
+│   ├── llama-3-8b-q4.gguf
+│   └── whisper-small/
+│
+└── README.md
