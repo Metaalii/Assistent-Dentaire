@@ -85,9 +85,9 @@ interface UploadZoneProps {
   fileName: string | null;
   isLoading: boolean;
   isDragActive: boolean;
-  onDragOver: (e: React.DragEvent) => void;
-  onDragLeave: (e: React.DragEvent) => void;
-  onDrop: (e: React.DragEvent) => void;
+  onDragOver: (e: React.DragEvent<HTMLDivElement>) => void;
+  onDragLeave: (e: React.DragEvent<HTMLDivElement>) => void;
+  onDrop: (e: React.DragEvent<HTMLDivElement>) => void;
   inputRef: React.RefObject<HTMLInputElement>;
 }
 

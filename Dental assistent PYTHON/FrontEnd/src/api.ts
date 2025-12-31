@@ -7,7 +7,7 @@ let cachedKey: string | null = null;
 async function getApiKey(): Promise<string> {
   if (cachedKey) return cachedKey;
   cachedKey = await invoke<string>("get_api_config");
-  return cachedKey;
+  return cachedKey!;
 }
 
 async function authHeaders(extra?: Record<string, string>) {
