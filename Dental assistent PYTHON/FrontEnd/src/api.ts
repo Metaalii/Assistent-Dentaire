@@ -62,7 +62,7 @@ export async function checkModelStatus(): Promise<HardwareInfo> {
 export async function downloadModel(): Promise<{ status: string }> {
   const res = await fetch(`${BASE_URL}/setup/download-model`, {
     method: "POST",
-    headers: await authHeaders({ "Content-Type": "application/json" }),
+    headers: await authHeaders(),
   });
 
   if (!res.ok) throw new Error(await safeError(res));
