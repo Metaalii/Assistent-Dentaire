@@ -52,9 +52,6 @@ MODELS_DIR.mkdir(parents=True, exist_ok=True)
 LLM_MODEL_PATH = MODELS_DIR / "llama-3-8b.gguf"
 WHISPER_MODEL_PATH = MODELS_DIR / "whisper-small"
 
-# Security key passed by main.rs / environment
-API_KEY = os.getenv("APP_API_KEY")
-
 
 # -------- Hardware detection (safe when torch is absent) --------
 
@@ -140,9 +137,3 @@ MODEL_CONFIGS = {
         "filename": "llama-3-8b-instruct.Q4_K_S.gguf",
     },
 }
-
-
-def llm_model_path_for(profile: str) -> Path:
-    """Preferred model path for a given profile (used by setup/download logic)."""
-    cfg = MODEL_CONFIGS.get(profile) or MODEL_CONFIGS["cpu_only"]
-    return MODELS_DIR / cfg["filename"]

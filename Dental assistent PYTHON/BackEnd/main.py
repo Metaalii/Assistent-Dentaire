@@ -16,8 +16,8 @@ logger = logging.getLogger("dental_assistant")
 
 app = FastAPI(title="Dental Assistant Backend")
 
-# ✅ Correct router import (your router is app/api/transcribe.py)
-from app.api.transcribe import router as transcribe_router  # noqa: E402
+# Router import from app/llm/api/transcribe.py
+from app.llm.api.transcribe import router as transcribe_router  # noqa: E402
 
 app.include_router(transcribe_router)
 
@@ -105,7 +105,7 @@ async def check_models():
     }
 
 
-@app.post("/setup/download-model")
+@app.post("/setup/download-model", dependencies=[Depends(verify_api_key)])
 async def download_model(background_tasks: BackgroundTasks):
     if LLM_MODEL_PATH.exists():
         return {"status": "already_exists"}
