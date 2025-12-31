@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
 import ModelSetup from "./components/ModelSetup";
 import MainDashboard from "./components/MainDashboard";
+import { ToothIcon, HeartPulseIcon, AlertCircleIcon, RefreshIcon } from "./components/ui/Icons";
+import { Button, MedicalLoader } from "./components/ui";
 
 type BootState =
   | { state: "starting" }
@@ -26,6 +28,135 @@ async function waitForHealth(timeoutMs = 10_000): Promise<void> {
   throw new Error("Backend did not become ready");
 }
 
+// ============================================
+// SPLASH SCREEN COMPONENT
+// ============================================
+const SplashScreen: React.FC = () => {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#f8fafc] via-[#e6f4f9] to-[#e0f7f6] relative overflow-hidden">
+      {/* Animated background elements */}
+      <div className="absolute inset-0 overflow-hidden">
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-gradient-to-br from-[#35a7d3]/20 to-[#00bdb8]/20 rounded-full blur-3xl animate-pulse" />
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-gradient-to-tr from-[#00bdb8]/20 to-[#35a7d3]/20 rounded-full blur-3xl animate-pulse delay-1000" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-r from-[#35a7d3]/5 to-[#00bdb8]/5 rounded-full blur-3xl" />
+      </div>
+
+      {/* Main content */}
+      <div className="relative z-10 flex flex-col items-center gap-8 p-8">
+        {/* Logo container */}
+        <div className="relative">
+          {/* Glowing ring */}
+          <div className="absolute inset-0 w-32 h-32 rounded-full bg-gradient-to-r from-[#35a7d3] to-[#00bdb8] blur-xl opacity-30 animate-pulse" />
+
+          {/* Logo background */}
+          <div className="relative w-32 h-32 rounded-3xl bg-gradient-to-br from-[#35a7d3] to-[#00bdb8] shadow-2xl shadow-[#35a7d3]/30 flex items-center justify-center transform hover:scale-105 transition-transform duration-300">
+            <ToothIcon className="text-white" size={64} />
+          </div>
+
+          {/* Heartbeat indicator */}
+          <div className="absolute -bottom-2 -right-2 w-10 h-10 rounded-full bg-white shadow-lg flex items-center justify-center">
+            <HeartPulseIcon className="text-[#00bdb8] animate-pulse" size={20} />
+          </div>
+        </div>
+
+        {/* Title */}
+        <div className="text-center">
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-[#1e293b] via-[#334155] to-[#1e293b] bg-clip-text text-transparent">
+            Dental Assistant
+          </h1>
+          <p className="mt-2 text-[#64748b] font-medium">
+            Professional AI-Powered Care
+          </p>
+        </div>
+
+        {/* Loading indicator */}
+        <div className="flex flex-col items-center gap-4">
+          <MedicalLoader text="Initializing system..." />
+        </div>
+
+        {/* Version badge */}
+        <div className="absolute bottom-8 left-1/2 -translate-x-1/2">
+          <div className="px-4 py-2 rounded-full bg-white/80 backdrop-blur-sm border border-[#e2e8f0] shadow-sm">
+            <span className="text-sm text-[#64748b] font-medium">Version 1.0</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ============================================
+// ERROR SCREEN COMPONENT
+// ============================================
+interface ErrorScreenProps {
+  message: string;
+  onRetry: () => void;
+}
+
+const ErrorScreen: React.FC<ErrorScreenProps> = ({ message, onRetry }) => {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#fef2f2] via-[#fee2e2] to-[#fecaca] relative overflow-hidden">
+      {/* Background pattern */}
+      <div className="absolute inset-0">
+        <div className="absolute top-20 right-20 w-64 h-64 bg-red-500/10 rounded-full blur-3xl" />
+        <div className="absolute bottom-20 left-20 w-64 h-64 bg-red-400/10 rounded-full blur-3xl" />
+      </div>
+
+      {/* Main content */}
+      <div className="relative z-10 max-w-md w-full mx-4">
+        <div className="bg-white/90 backdrop-blur-xl rounded-3xl shadow-2xl shadow-red-500/10 border border-red-100 p-8 text-center">
+          {/* Error icon */}
+          <div className="mx-auto w-20 h-20 rounded-2xl bg-gradient-to-br from-red-500 to-red-600 shadow-lg shadow-red-500/30 flex items-center justify-center mb-6">
+            <AlertCircleIcon className="text-white" size={40} />
+          </div>
+
+          {/* Error title */}
+          <h2 className="text-2xl font-bold text-[#1e293b] mb-3">
+            Connection Failed
+          </h2>
+
+          {/* Error message */}
+          <p className="text-[#64748b] mb-6 leading-relaxed">
+            {message}
+          </p>
+
+          {/* Troubleshooting tips */}
+          <div className="bg-red-50 rounded-xl p-4 mb-6 text-left">
+            <p className="text-sm font-semibold text-red-800 mb-2">Troubleshooting:</p>
+            <ul className="text-sm text-red-700 space-y-1">
+              <li className="flex items-start gap-2">
+                <span className="text-red-400 mt-0.5">&bull;</span>
+                Check if the backend service is running
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-red-400 mt-0.5">&bull;</span>
+                Verify network connectivity
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-red-400 mt-0.5">&bull;</span>
+                Restart the application
+              </li>
+            </ul>
+          </div>
+
+          {/* Retry button */}
+          <Button
+            variant="danger"
+            onClick={onRetry}
+            leftIcon={<RefreshIcon size={18} />}
+            className="w-full"
+          >
+            Try Again
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ============================================
+// MAIN APP COMPONENT
+// ============================================
 export default function App() {
   const [boot, setBoot] = useState<BootState>({ state: "starting" });
 
@@ -51,25 +182,15 @@ export default function App() {
   }, []);
 
   if (boot.state === "starting") {
-    return (
-      <div className="flex h-screen items-center justify-center bg-slate-50">
-        <div className="text-slate-700 font-medium">Starting backend…</div>
-      </div>
-    );
+    return <SplashScreen />;
   }
 
   if (boot.state === "error") {
     return (
-      <div className="flex h-screen flex-col items-center justify-center bg-red-50 p-8 text-center">
-        <h2 className="text-xl font-bold text-red-700">Startup Failed</h2>
-        <p className="mt-2 text-red-600">{boot.message}</p>
-        <button
-          onClick={() => window.location.reload()}
-          className="mt-6 rounded bg-red-600 px-6 py-2 text-white hover:bg-red-700"
-        >
-          Retry
-        </button>
-      </div>
+      <ErrorScreen
+        message={boot.message}
+        onRetry={() => window.location.reload()}
+      />
     );
   }
 
@@ -78,7 +199,7 @@ export default function App() {
   }
 
   return (
-    <div className="app-container">
+    <div className="min-h-screen bg-gradient-to-br from-[#f8fafc] via-[#e6f4f9] to-[#f8fafc]">
       <MainDashboard />
     </div>
   );
