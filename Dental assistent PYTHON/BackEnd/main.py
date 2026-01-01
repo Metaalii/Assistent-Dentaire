@@ -7,7 +7,7 @@ from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from app.config import MODEL_CONFIGS, get_llm_model_path, analyze_hardware
+from app.config import MODEL_CONFIGS, get_llm_model_path, analyze_hardware, get_hardware_info
 from app.middleware import MaxRequestSizeMiddleware, SimpleRateLimitMiddleware
 from app.security import verify_api_key
 
@@ -93,16 +93,28 @@ def _atomic_download(url: str, dest_path: Path) -> None:
 
 @app.get("/setup/check-models")
 async def check_models():
-    profile = analyze_hardware()
+    # Get detailed hardware info from tiered detection
+    hw_info = get_hardware_info()
+    profile = hw_info["profile"]
     cfg = MODEL_CONFIGS[profile]
     model_path = get_llm_model_path(profile)
     downloaded = model_path.exists()
+
     return {
+        # Core info
         "hardware_profile": profile,
         "is_downloaded": downloaded,
         "model_exists": downloaded,  # backward compat
         "recommended_model": cfg["filename"],
         "download_url": cfg["url"],
+        "model_size_gb": cfg.get("size_gb"),
+        "model_description": cfg.get("description"),
+        # Detailed hardware info
+        "gpu_detected": hw_info.get("gpu_detected", False),
+        "gpu_name": hw_info.get("gpu_name"),
+        "vram_gb": hw_info.get("vram_gb"),
+        "backend_gpu_support": hw_info.get("backend_gpu_support", False),
+        "detection_method": hw_info.get("detection_method", "none"),
     }
 
 
