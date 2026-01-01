@@ -47,13 +47,8 @@ BASE_DIR = app_base_dir()
 MODELS_DIR = user_data_dir() / "models"
 MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
-# Backward-compatible “canonical” paths
-# (We keep these stable so existing code keeps working.)
-LLM_MODEL_PATH = MODELS_DIR / "llama-3-8b.gguf"
+# Whisper model path (fixed location)
 WHISPER_MODEL_PATH = MODELS_DIR / "whisper-small"
-
-# Security key passed by main.rs / environment
-API_KEY = os.getenv("APP_API_KEY")
 
 
 # -------- Hardware detection (safe when torch is absent) --------
@@ -142,7 +137,12 @@ MODEL_CONFIGS = {
 }
 
 
-def llm_model_path_for(profile: str) -> Path:
-    """Preferred model path for a given profile (used by setup/download logic)."""
+def get_llm_model_path(profile: str = None) -> Path:
+    """
+    Get the LLM model path for a specific hardware profile.
+    If no profile is provided, uses the current hardware profile.
+    """
+    if profile is None:
+        profile = analyze_hardware()
     cfg = MODEL_CONFIGS.get(profile) or MODEL_CONFIGS["cpu_only"]
     return MODELS_DIR / cfg["filename"]

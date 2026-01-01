@@ -7,7 +7,7 @@ from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from app.config import MODEL_CONFIGS, LLM_MODEL_PATH, analyze_hardware
+from app.config import MODEL_CONFIGS, get_llm_model_path, analyze_hardware
 from app.middleware import MaxRequestSizeMiddleware, SimpleRateLimitMiddleware
 from app.security import verify_api_key
 
@@ -16,8 +16,8 @@ logger = logging.getLogger("dental_assistant")
 
 app = FastAPI(title="Dental Assistant Backend")
 
-# ✅ Correct router import (your router is app/api/transcribe.py)
-from app.api.transcribe import router as transcribe_router  # noqa: E402
+# Router import from app/llm/api/transcribe.py
+from app.llm.api.transcribe import router as transcribe_router  # noqa: E402
 
 app.include_router(transcribe_router)
 
@@ -42,7 +42,7 @@ class SummaryRequest(BaseModel):
 
 @app.post("/summarize", dependencies=[Depends(verify_api_key)])
 async def summarize(req: SummaryRequest):
-    if not LLM_MODEL_PATH.exists():
+    if not get_llm_model_path().exists():
         raise HTTPException(status_code=503, detail="Model not downloaded. Please run setup.")
 
     # Lazy import: backend boots even without llama-cpp-python installed.
@@ -95,7 +95,8 @@ def _atomic_download(url: str, dest_path: Path) -> None:
 async def check_models():
     profile = analyze_hardware()
     cfg = MODEL_CONFIGS[profile]
-    downloaded = LLM_MODEL_PATH.exists()
+    model_path = get_llm_model_path(profile)
+    downloaded = model_path.exists()
     return {
         "hardware_profile": profile,
         "is_downloaded": downloaded,
@@ -105,18 +106,20 @@ async def check_models():
     }
 
 
-@app.post("/setup/download-model")
+@app.post("/setup/download-model", dependencies=[Depends(verify_api_key)])
 async def download_model(background_tasks: BackgroundTasks):
-    if LLM_MODEL_PATH.exists():
+    profile = analyze_hardware()
+    model_path = get_llm_model_path(profile)
+
+    if model_path.exists():
         return {"status": "already_exists"}
 
-    profile = analyze_hardware()
     url = MODEL_CONFIGS[profile]["url"]
 
-    background_tasks.add_task(_atomic_download, url, LLM_MODEL_PATH)
+    background_tasks.add_task(_atomic_download, url, model_path)
     return {"status": "started", "profile": profile}
 
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "models_ready": LLM_MODEL_PATH.exists()}
+    return {"status": "ok", "models_ready": get_llm_model_path().exists()}

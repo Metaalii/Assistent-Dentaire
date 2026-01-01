@@ -7,7 +7,7 @@ let cachedKey: string | null = null;
 async function getApiKey(): Promise<string> {
   if (cachedKey) return cachedKey;
   cachedKey = await invoke<string>("get_api_config");
-  return cachedKey;
+  return cachedKey!;
 }
 
 async function authHeaders(extra?: Record<string, string>) {
@@ -62,7 +62,7 @@ export async function checkModelStatus(): Promise<HardwareInfo> {
 export async function downloadModel(): Promise<{ status: string }> {
   const res = await fetch(`${BASE_URL}/setup/download-model`, {
     method: "POST",
-    headers: await authHeaders({ "Content-Type": "application/json" }),
+    headers: await authHeaders(),
   });
 
   if (!res.ok) throw new Error(await safeError(res));

@@ -8,7 +8,7 @@ from typing import Optional
 
 from fastapi import HTTPException
 
-from app.config import LLM_MODEL_PATH
+from app.config import get_llm_model_path
 
 logger = logging.getLogger("dental_assistant.local_llm")
 
@@ -36,13 +36,14 @@ class LocalLLM:
                     cls._instance._inference_semaphore = asyncio.Semaphore(1)
         return cls._instance
 
-    def _ensure_model_file(self) -> None:
-        model_path = Path(LLM_MODEL_PATH)
+    def _ensure_model_file(self) -> Path:
+        model_path = get_llm_model_path()
         if not model_path.exists():
             raise HTTPException(
                 status_code=503,
                 detail=f"LLM model not found at {model_path}. Run setup/download first.",
             )
+        return model_path
 
     def _load_model_if_needed(self) -> None:
         if self._llm is not None:
@@ -52,7 +53,7 @@ class LocalLLM:
             if self._llm is not None:
                 return
 
-            self._ensure_model_file()
+            model_path = self._ensure_model_file()
 
             # Lazy import so backend can start without llama-cpp-python installed
             try:
@@ -63,11 +64,11 @@ class LocalLLM:
                     detail="LLM dependency not installed (llama-cpp-python). Install it to enable summarization.",
                 ) from e
 
-            logger.info("Loading LLM model from %s ...", LLM_MODEL_PATH)
+            logger.info("Loading LLM model from %s ...", model_path)
 
             # MVP defaults — conservative, stable
             self._llm = Llama(
-                model_path=str(LLM_MODEL_PATH),
+                model_path=str(model_path),
                 n_ctx=4096,
                 n_threads=None,  # let llama.cpp decide
                 n_gpu_layers=0,  # CPU-only MVP (safe default)
