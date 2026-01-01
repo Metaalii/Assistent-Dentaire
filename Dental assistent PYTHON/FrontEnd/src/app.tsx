@@ -1,10 +1,13 @@
 import React, { useEffect, useState } from "react";
 import ModelSetup from "./components/ModelSetup";
 import MainDashboard from "./components/MainDashboard";
+import LanguageSelector from "./components/LanguageSelector";
+import { LanguageProvider, useLanguage } from "./i18n";
 import { ToothIcon, HeartPulseIcon, AlertCircleIcon, RefreshIcon } from "./components/ui/Icons";
 import { Button, MedicalLoader } from "./components/ui";
 
 type BootState =
+  | { state: "language" }
   | { state: "starting" }
   | { state: "setup" }
   | { state: "ready" }
@@ -32,6 +35,8 @@ async function waitForHealth(timeoutMs = 10_000): Promise<void> {
 // SPLASH SCREEN COMPONENT
 // ============================================
 const SplashScreen: React.FC = () => {
+  const { t } = useLanguage();
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#f8fafc] via-[#e6f4f9] to-[#e0f7f6] relative overflow-hidden">
       {/* Animated background elements */}
@@ -62,22 +67,22 @@ const SplashScreen: React.FC = () => {
         {/* Title */}
         <div className="text-center">
           <h1 className="text-4xl font-bold bg-gradient-to-r from-[#1e293b] via-[#334155] to-[#1e293b] bg-clip-text text-transparent">
-            Dental Assistant
+            {t("appName")}
           </h1>
           <p className="mt-2 text-[#64748b] font-medium">
-            Professional AI-Powered Care
+            {t("appTagline")}
           </p>
         </div>
 
         {/* Loading indicator */}
         <div className="flex flex-col items-center gap-4">
-          <MedicalLoader text="Initializing system..." />
+          <MedicalLoader text={t("initializing") as string} />
         </div>
 
         {/* Version badge */}
         <div className="absolute bottom-8 left-1/2 -translate-x-1/2">
           <div className="px-4 py-2 rounded-full bg-white/80 backdrop-blur-sm border border-[#e2e8f0] shadow-sm">
-            <span className="text-sm text-[#64748b] font-medium">Version 1.0</span>
+            <span className="text-sm text-[#64748b] font-medium">{t("version")}</span>
           </div>
         </div>
       </div>
@@ -94,6 +99,9 @@ interface ErrorScreenProps {
 }
 
 const ErrorScreen: React.FC<ErrorScreenProps> = ({ message, onRetry }) => {
+  const { t } = useLanguage();
+  const tips = t("troubleshootingTips") as string[];
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#fef2f2] via-[#fee2e2] to-[#fecaca] relative overflow-hidden">
       {/* Background pattern */}
@@ -112,7 +120,7 @@ const ErrorScreen: React.FC<ErrorScreenProps> = ({ message, onRetry }) => {
 
           {/* Error title */}
           <h2 className="text-2xl font-bold text-[#1e293b] mb-3">
-            Connection Failed
+            {t("connectionFailed")}
           </h2>
 
           {/* Error message */}
@@ -122,20 +130,14 @@ const ErrorScreen: React.FC<ErrorScreenProps> = ({ message, onRetry }) => {
 
           {/* Troubleshooting tips */}
           <div className="bg-red-50 rounded-xl p-4 mb-6 text-left">
-            <p className="text-sm font-semibold text-red-800 mb-2">Troubleshooting:</p>
+            <p className="text-sm font-semibold text-red-800 mb-2">{t("troubleshooting")}</p>
             <ul className="text-sm text-red-700 space-y-1">
-              <li className="flex items-start gap-2">
-                <span className="text-red-400 mt-0.5">&bull;</span>
-                Check if the backend service is running
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-red-400 mt-0.5">&bull;</span>
-                Verify network connectivity
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-red-400 mt-0.5">&bull;</span>
-                Restart the application
-              </li>
+              {tips.map((tip, index) => (
+                <li key={index} className="flex items-start gap-2">
+                  <span className="text-red-400 mt-0.5">&bull;</span>
+                  {tip}
+                </li>
+              ))}
             </ul>
           </div>
 
@@ -146,7 +148,7 @@ const ErrorScreen: React.FC<ErrorScreenProps> = ({ message, onRetry }) => {
             leftIcon={<RefreshIcon size={18} />}
             className="w-full"
           >
-            Try Again
+            {t("tryAgain")}
           </Button>
         </div>
       </div>
@@ -155,12 +157,20 @@ const ErrorScreen: React.FC<ErrorScreenProps> = ({ message, onRetry }) => {
 };
 
 // ============================================
-// MAIN APP COMPONENT
+// APP CONTENT (inside LanguageProvider)
 // ============================================
-export default function App() {
-  const [boot, setBoot] = useState<BootState>({ state: "starting" });
+const LANGUAGE_SELECTED_KEY = "dental-assistant-language-selected";
+
+function AppContent() {
+  const [boot, setBoot] = useState<BootState>(() => {
+    // Check if language was already selected
+    const wasSelected = localStorage.getItem(LANGUAGE_SELECTED_KEY);
+    return wasSelected ? { state: "starting" } : { state: "language" };
+  });
 
   useEffect(() => {
+    if (boot.state !== "starting") return;
+
     let cancelled = false;
 
     (async () => {
@@ -179,7 +189,16 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [boot.state]);
+
+  const handleLanguageSelected = () => {
+    localStorage.setItem(LANGUAGE_SELECTED_KEY, "true");
+    setBoot({ state: "starting" });
+  };
+
+  if (boot.state === "language") {
+    return <LanguageSelector onComplete={handleLanguageSelected} />;
+  }
 
   if (boot.state === "starting") {
     return <SplashScreen />;
@@ -202,5 +221,16 @@ export default function App() {
     <div className="min-h-screen bg-gradient-to-br from-[#f8fafc] via-[#e6f4f9] to-[#f8fafc]">
       <MainDashboard />
     </div>
+  );
+}
+
+// ============================================
+// MAIN APP COMPONENT
+// ============================================
+export default function App() {
+  return (
+    <LanguageProvider>
+      <AppContent />
+    </LanguageProvider>
   );
 }

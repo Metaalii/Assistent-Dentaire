@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { checkModelStatus, downloadModel, HardwareInfo } from "../api";
+import { useLanguage } from "../i18n";
 import {
   Button,
   Card,
@@ -89,10 +90,12 @@ interface HardwareInfoCardProps {
 }
 
 const HardwareInfoCard: React.FC<HardwareInfoCardProps> = ({ hardware }) => {
+  const { t } = useLanguage();
+
   const profileLabels: Record<string, { label: string; variant: "success" | "warning" | "primary" }> = {
-    high_vram: { label: "High Performance GPU", variant: "success" },
-    low_vram: { label: "Standard GPU", variant: "primary" },
-    cpu_only: { label: "CPU Mode", variant: "warning" },
+    high_vram: { label: t("highVram") as string, variant: "success" },
+    low_vram: { label: t("lowVram") as string, variant: "primary" },
+    cpu_only: { label: t("cpuOnly") as string, variant: "warning" },
   };
 
   const profile = profileLabels[hardware.hardware_profile] || {
@@ -108,11 +111,11 @@ const HardwareInfoCard: React.FC<HardwareInfoCardProps> = ({ hardware }) => {
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="font-semibold text-[#1e293b]">System Profile</h3>
+            <h3 className="font-semibold text-[#1e293b]">{t("hardwareProfile")}</h3>
             <Badge variant={profile.variant}>{profile.label}</Badge>
           </div>
           <p className="mt-2 text-sm text-[#64748b]">
-            Recommended model:{" "}
+            {t("recommendedModel")}:{" "}
             <span className="font-medium text-[#334155]">
               {hardware.recommended_model}
             </span>
@@ -132,6 +135,7 @@ const HardwareInfoCard: React.FC<HardwareInfoCardProps> = ({ hardware }) => {
 // MAIN MODEL SETUP COMPONENT
 // ============================================
 export default function ModelSetup({ onReady }: Props) {
+  const { t } = useLanguage();
   const [step, setStep] = useState<"checking" | "confirm" | "downloading" | "error">("checking");
   const [hardware, setHardware] = useState<HardwareInfo | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
@@ -140,7 +144,7 @@ export default function ModelSetup({ onReady }: Props) {
   const progressTimer = useRef<number | null>(null);
   const statusTimer = useRef<number | null>(null);
 
-  const steps = ["Check System", "Download Models", "Complete"];
+  const steps = [t("stepHardware") as string, t("stepDownload") as string, t("stepReady") as string];
   const currentStepIndex = step === "checking" ? 0 : step === "confirm" ? 0 : step === "downloading" ? 1 : 0;
 
   useEffect(() => {
@@ -221,9 +225,9 @@ export default function ModelSetup({ onReady }: Props) {
   const renderChecking = () => (
     <Card glass className="text-center">
       <CardBody className="py-12">
-        <MedicalLoader text="Analyzing your system..." />
+        <MedicalLoader text={t("analyzingHardware") as string} />
         <p className="mt-6 text-sm text-[#94a3b8]">
-          Detecting hardware capabilities and model requirements
+          {t("systemRequirements")}
         </p>
       </CardBody>
     </Card>
@@ -240,14 +244,14 @@ export default function ModelSetup({ onReady }: Props) {
             <AlertCircleIcon className="text-white" size={20} />
           </div>
           <div>
-            <h3 className="font-semibold text-white">Setup Error</h3>
-            <p className="text-sm text-red-100">Something went wrong</p>
+            <h3 className="font-semibold text-white">{t("processingError")}</h3>
+            <p className="text-sm text-red-100">{t("errorOccurred")}</p>
           </div>
         </div>
       </div>
       <CardBody>
         <Alert variant="error" icon={<AlertCircleIcon size={18} />}>
-          {errorMsg || "An unexpected error occurred"}
+          {errorMsg || t("errorOccurred")}
         </Alert>
         <div className="mt-6 flex flex-col sm:flex-row gap-3">
           <Button
@@ -256,14 +260,14 @@ export default function ModelSetup({ onReady }: Props) {
             leftIcon={<RefreshIcon size={18} />}
             className="flex-1"
           >
-            Retry Connection
+            {t("tryAgain")}
           </Button>
           <Button
             variant="ghost"
             onClick={() => window.location.reload()}
             className="flex-1"
           >
-            Restart Application
+            {t("tryAgain")}
           </Button>
         </div>
       </CardBody>
@@ -281,8 +285,8 @@ export default function ModelSetup({ onReady }: Props) {
             <DownloadIcon className="text-white animate-bounce" size={20} />
           </div>
           <div>
-            <h3 className="font-semibold text-white">Downloading Models</h3>
-            <p className="text-sm text-white/80">Please wait while we set things up</p>
+            <h3 className="font-semibold text-white">{t("downloadingModel")}</h3>
+            <p className="text-sm text-white/80">{t("downloadProgress")}</p>
           </div>
         </div>
       </div>
@@ -291,7 +295,7 @@ export default function ModelSetup({ onReady }: Props) {
         <div>
           <div className="flex items-center justify-between mb-3">
             <span className="text-sm font-medium text-[#334155]">
-              Download Progress
+              {t("downloading")}
             </span>
             <span className="text-sm font-bold text-[#35a7d3]">{progress}%</span>
           </div>
@@ -304,8 +308,7 @@ export default function ModelSetup({ onReady }: Props) {
         {/* Info message */}
         <Alert variant="info">
           <p className="text-sm">
-            <strong>Tip:</strong> You can keep this window open. The download will continue
-            automatically and the app will start when ready.
+            {t("downloadProgress")}
           </p>
         </Alert>
 
@@ -315,11 +318,11 @@ export default function ModelSetup({ onReady }: Props) {
             <p className="text-2xl font-bold text-[#35a7d3]">
               {hardware?.recommended_model?.includes("7B") ? "~4GB" : "~2GB"}
             </p>
-            <p className="text-xs text-[#94a3b8] mt-1">Estimated Size</p>
+            <p className="text-xs text-[#94a3b8] mt-1">{t("downloadSize")}</p>
           </div>
           <div className="bg-[#f8fafc] rounded-xl p-4 text-center">
             <p className="text-2xl font-bold text-[#00bdb8]">100%</p>
-            <p className="text-xs text-[#94a3b8] mt-1">Local & Private</p>
+            <p className="text-xs text-[#94a3b8] mt-1">{t("optimal")}</p>
           </div>
         </div>
       </CardBody>
@@ -337,21 +340,12 @@ export default function ModelSetup({ onReady }: Props) {
             <SettingsIcon className="text-white" size={20} />
           </div>
           <div>
-            <h3 className="font-semibold text-white">Initial Setup Required</h3>
-            <p className="text-sm text-white/80">Download AI models to get started</p>
+            <h3 className="font-semibold text-white">{t("setupTitle")}</h3>
+            <p className="text-sm text-white/80">{t("setupSubtitle")}</p>
           </div>
         </div>
       </div>
       <CardBody className="space-y-6">
-        {/* Introduction */}
-        <div>
-          <p className="text-[#475569] leading-relaxed">
-            To enable transcription and AI summarization, we need to download the
-            language models to your device. This is a <strong>one-time setup</strong> that
-            enables fully <strong>offline operation</strong>.
-          </p>
-        </div>
-
         {/* Hardware info */}
         {hardware && <HardwareInfoCard hardware={hardware} />}
 
@@ -362,21 +356,18 @@ export default function ModelSetup({ onReady }: Props) {
               <CheckCircleIcon className="text-white" size={20} />
             </div>
             <p className="text-sm font-semibold text-[#166534]">100% Private</p>
-            <p className="text-xs text-[#22c55e] mt-1">Data stays on device</p>
           </div>
           <div className="bg-[#e6f4f9] rounded-xl p-4 text-center border border-[#c0e4f1]">
             <div className="w-10 h-10 mx-auto rounded-xl bg-gradient-to-br from-[#35a7d3] to-[#2584ae] flex items-center justify-center mb-3">
               <CpuIcon className="text-white" size={20} />
             </div>
             <p className="text-sm font-semibold text-[#0d5072]">Offline Ready</p>
-            <p className="text-xs text-[#35a7d3] mt-1">No internet needed</p>
           </div>
           <div className="bg-[#e0f7f6] rounded-xl p-4 text-center border border-[#b3ebe8]">
             <div className="w-10 h-10 mx-auto rounded-xl bg-gradient-to-br from-[#00bdb8] to-[#009a94] flex items-center justify-center mb-3">
               <ToothIcon className="text-white" size={20} />
             </div>
             <p className="text-sm font-semibold text-[#006860]">Medical Grade</p>
-            <p className="text-xs text-[#00bdb8] mt-1">Optimized for dental</p>
           </div>
         </div>
 
@@ -388,14 +379,14 @@ export default function ModelSetup({ onReady }: Props) {
             leftIcon={<DownloadIcon size={18} />}
             className="flex-1"
           >
-            Download and Continue
+            {t("downloadAndContinue")}
           </Button>
           <Button
             variant="ghost"
             onClick={refreshStatus}
             leftIcon={<RefreshIcon size={18} />}
           >
-            Re-check Status
+            {t("tryAgain")}
           </Button>
         </div>
       </CardBody>
@@ -421,10 +412,10 @@ export default function ModelSetup({ onReady }: Props) {
             <ToothIcon className="text-white" size={32} />
           </div>
           <h1 className="text-3xl font-bold text-[#1e293b]">
-            Dental Assistant
+            {t("appName")}
           </h1>
           <p className="mt-2 text-[#64748b]">
-            One-time setup for offline AI capabilities
+            {t("setupSubtitle")}
           </p>
         </div>
 
