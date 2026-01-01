@@ -2,12 +2,24 @@ import { invoke } from "@tauri-apps/api/core";
 
 const BASE_URL = "http://127.0.0.1:9000";
 
+// Dev mode API key - must match APP_API_KEY env var when running backend manually
+const DEV_API_KEY = "dev-api-key-12345";
+
 let cachedKey: string | null = null;
 
 async function getApiKey(): Promise<string> {
   if (cachedKey) return cachedKey;
-  cachedKey = await invoke<string>("get_api_config");
-  return cachedKey!;
+
+  try {
+    // Try Tauri invoke first (works in desktop app)
+    cachedKey = await invoke<string>("get_api_config");
+    return cachedKey!;
+  } catch {
+    // Fallback to dev key when running in browser
+    console.warn("Tauri not available, using dev API key");
+    cachedKey = DEV_API_KEY;
+    return cachedKey;
+  }
 }
 
 async function authHeaders(extra?: Record<string, string>) {
