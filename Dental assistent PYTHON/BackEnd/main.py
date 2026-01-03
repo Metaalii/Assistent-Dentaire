@@ -22,9 +22,18 @@ from app.llm.api.transcribe import router as transcribe_router  # noqa: E402
 app.include_router(transcribe_router)
 
 # --- Middlewares ---
+# Allow both desktop (Tauri) and local dev servers (Vite defaults to 5173)
+ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "tauri://localhost",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "tauri://localhost"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["X-API-Key", "Content-Type"],
