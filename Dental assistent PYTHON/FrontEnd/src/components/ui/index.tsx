@@ -212,13 +212,21 @@ export const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
 interface MedicalLoaderProps {
   text?: string;
   className?: string;
+  labelId?: string;
 }
 
 export const MedicalLoader: React.FC<MedicalLoaderProps> = ({
   text,
   className = "",
+  labelId,
 }) => (
-  <div className={`flex flex-col items-center gap-4 ${className}`}>
+  <div
+    className={`flex flex-col items-center gap-4 ${className}`}
+    role="status"
+    aria-live="polite"
+    aria-busy="true"
+    aria-describedby={labelId}
+  >
     <div className="relative">
       {/* Outer ring */}
       <div className="w-16 h-16 rounded-full border-4 border-[#e6f4f9]" />
@@ -241,7 +249,12 @@ export const MedicalLoader: React.FC<MedicalLoaderProps> = ({
       />
     </div>
     {text && (
-      <p className="text-[#64748b] font-medium animate-pulse">{text}</p>
+      <p
+        id={labelId}
+        className="text-center text-[#475569] font-medium leading-relaxed"
+      >
+        {text}
+      </p>
     )}
   </div>
 );
