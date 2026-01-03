@@ -5,17 +5,12 @@
 
 use std::{
     net::TcpStream,
-    sync::{Arc, Mutex},
     thread,
     time::Duration,
 };
-
-use tauri::{Manager, RunEvent};
-use tauri::api::process::{Command, CommandEvent};
 use uuid::Uuid;
 
 struct AppState {
-    backend_process: Arc<Mutex<Option<tauri::api::process::Child>>>,
     api_key: String,
 }
 
@@ -25,36 +20,16 @@ fn generate_api_key() -> String {
     Uuid::new_v4().to_string()
 }
 
-/* ---------- BACKEND ---------- */
+/* ---------- BACKEND CHECK ---------- */
 
-fn start_backend(api_key: &str) -> tauri::api::process::Child {
-    let (mut rx, child) = Command::new_sidecar("dental-backend")
-        .expect("Sidecar not found: dental-backend")
-        .env("APP_API_KEY", api_key)
-        .spawn()
-        .expect("Failed to start backend sidecar");
-
-    // Optional: log backend output
-    tauri::async_runtime::spawn(async move {
-        while let Some(event) = rx.recv().await {
-            if let CommandEvent::Stderr(line) = event {
-                eprintln!("[backend] {line}");
-            }
-        }
-    });
-
-    child
-}
-
-fn wait_for_backend() {
+fn wait_for_backend() -> bool {
     for _ in 0..40 {
         if TcpStream::connect("127.0.0.1:9000").is_ok() {
-            return;
+            return true;
         }
         thread::sleep(Duration::from_millis(250));
     }
-
-    panic!("Backend did not become ready");
+    false
 }
 
 /* ---------- TAURI COMMAND ---------- */
@@ -67,29 +42,26 @@ fn get_api_config(state: tauri::State<AppState>) -> String {
 /* ---------- MAIN ---------- */
 
 fn main() {
-    let api_key = generate_api_key();
+    // For MVP dev mode, use a known API key that matches the backend
+    // In production, we'd start the backend sidecar with a generated key
+    let api_key = std::env::var("APP_API_KEY")
+        .unwrap_or_else(|_| "dev-api-key-12345".to_string());
 
-    let backend_child = start_backend(&api_key);
-    wait_for_backend();
+    // Wait for external backend (in dev) or start sidecar (in prod)
+    if !wait_for_backend() {
+        eprintln!("Warning: Backend not responding on port 9000");
+        eprintln!("Please start the backend manually:");
+        eprintln!("  APP_API_KEY=\"dev-api-key-12345\" uvicorn main:app --host 127.0.0.1 --port 9000");
+    }
 
-    let state = AppState {
-        backend_process: Arc::new(Mutex::new(Some(backend_child))),
-        api_key,
-    };
+    let state = AppState { api_key };
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_process::init())
         .manage(state)
         .invoke_handler(tauri::generate_handler![get_api_config])
-        .build(tauri::generate_context!())
-        .expect("Tauri build failed")
-        .run(|app_handle, event| {
-            if let RunEvent::Exit = event {
-                let state = app_handle.state::<AppState>();
-                if let Ok(mut guard) = state.backend_process.lock() {
-                    if let Some(child) = guard.take() {
-                        let _ = child.kill();
-                    }
-                }
-            }
-        });
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
 }
