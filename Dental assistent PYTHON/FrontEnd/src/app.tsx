@@ -159,13 +159,22 @@ const ErrorScreen: React.FC<ErrorScreenProps> = ({ message, onRetry }) => {
 // ============================================
 // APP CONTENT (inside LanguageProvider)
 // ============================================
-const LANGUAGE_SELECTED_KEY = "dental-assistant-language-selected";
+const SESSION_LANGUAGE_SELECTED_KEY = "dental-assistant-language-selected";
+
+function hasSeenLanguageSelector() {
+  if (typeof window === "undefined") return false;
+  return sessionStorage.getItem(SESSION_LANGUAGE_SELECTED_KEY) === "true";
+}
+
+function rememberLanguageSelectorSeen() {
+  if (typeof window === "undefined") return;
+  sessionStorage.setItem(SESSION_LANGUAGE_SELECTED_KEY, "true");
+}
 
 function AppContent() {
   const [boot, setBoot] = useState<BootState>(() => {
-    // Check if language was already selected
-    const wasSelected = localStorage.getItem(LANGUAGE_SELECTED_KEY);
-    return wasSelected ? { state: "starting" } : { state: "language" };
+    // Show the language selector once per browsing session
+    return hasSeenLanguageSelector() ? { state: "starting" } : { state: "language" };
   });
 
   useEffect(() => {
@@ -192,7 +201,7 @@ function AppContent() {
   }, [boot.state]);
 
   const handleLanguageSelected = () => {
-    localStorage.setItem(LANGUAGE_SELECTED_KEY, "true");
+    rememberLanguageSelectorSeen();
     setBoot({ state: "starting" });
   };
 
