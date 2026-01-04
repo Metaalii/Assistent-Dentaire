@@ -8,16 +8,9 @@ use std::{
     thread,
     time::Duration,
 };
-use uuid::Uuid;
 
 struct AppState {
     api_key: String,
-}
-
-/* ---------- API KEY ---------- */
-
-fn generate_api_key() -> String {
-    Uuid::new_v4().to_string()
 }
 
 /* ---------- BACKEND CHECK ---------- */
