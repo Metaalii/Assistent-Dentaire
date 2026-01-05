@@ -7,7 +7,7 @@ from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from app.config import MODEL_CONFIGS, get_llm_model_path, analyze_hardware, get_hardware_info
+from app.config import MODEL_CONFIGS, get_llm_model_path, analyze_hardware, get_hardware_info, HF_TOKEN
 from app.middleware import MaxRequestSizeMiddleware, SimpleRateLimitMiddleware
 from app.security import verify_api_key
 
@@ -71,7 +71,7 @@ def _ensure_parent_dir(path: Path) -> None:
 def _atomic_download(url: str, dest_path: Path) -> None:
     """
     MVP-safe download:
-    - stream download
+    - stream download with HuggingFace authentication
     - raise_for_status() to avoid saving error pages
     - write to .part then rename atomically
     """
@@ -80,8 +80,14 @@ def _atomic_download(url: str, dest_path: Path) -> None:
 
     logger.info("Downloading model: %s -> %s", url, dest_path)
 
+    # Add HuggingFace token for authenticated downloads
+    headers = {}
+    if HF_TOKEN and "huggingface.co" in url:
+        headers["Authorization"] = f"Bearer {HF_TOKEN}"
+        logger.info("Using HuggingFace token for download")
+
     try:
-        with requests.get(url, stream=True, timeout=(10, 180)) as r:
+        with requests.get(url, stream=True, timeout=(10, 180), headers=headers) as r:
             r.raise_for_status()
             with open(tmp_path, "wb") as f:
                 shutil.copyfileobj(r.raw, f)

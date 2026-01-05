@@ -7,6 +7,11 @@ from typing import Tuple, Optional, Dict, Any
 
 logger = logging.getLogger("dental_assistant.config")
 
+# -------- Hugging Face Token --------
+# Used for downloading models from Hugging Face
+# Set via environment variable: HF_TOKEN=hf_xxxxx
+HF_TOKEN = os.getenv("HF_TOKEN", "")
+
 # -------- Paths (dev vs frozen) --------
 
 def is_frozen() -> bool:
