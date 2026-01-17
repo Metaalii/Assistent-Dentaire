@@ -1,9 +1,9 @@
 import os
 import sys
-import subprocess
 import logging
 from pathlib import Path
 from typing import Tuple, Optional, Dict, Any
+from .platform import get_platform
 
 logger = logging.getLogger("dental_assistant.config")
 
@@ -27,21 +27,13 @@ def app_base_dir() -> Path:
 def user_data_dir(app_name: str = "DentalAssistant") -> Path:
     """
     Cross-platform, dependency-free app data directory.
+    Uses platform-specific implementation:
     - Windows: %APPDATA%\\DentalAssistant
     - macOS:   ~/Library/Application Support/DentalAssistant
     - Linux:   ~/.local/share/DentalAssistant  (or $XDG_DATA_HOME)
     """
-    if sys.platform.startswith("win"):
-        root = os.getenv("APPDATA") or str(Path.home() / "AppData" / "Roaming")
-        return Path(root) / app_name
-
-    if sys.platform == "darwin":
-        return Path.home() / "Library" / "Application Support" / app_name
-
-    # Linux / other unix
-    xdg = os.getenv("XDG_DATA_HOME")
-    root = Path(xdg) if xdg else (Path.home() / ".local" / "share")
-    return root / app_name
+    platform = get_platform()
+    return platform.get_user_data_dir(app_name)
 
 
 BASE_DIR = app_base_dir()
@@ -130,188 +122,21 @@ class HardwareDetector:
 
     @classmethod
     def _detect_gpu_driver(cls) -> Optional[Dict[str, Any]]:
-        """Detect GPU via system commands (no Python GPU libraries needed)."""
+        """Detect GPU via platform-specific implementation."""
+        platform = get_platform()
+        return platform.detect_gpu()
 
-        # Try NVIDIA first (most common)
-        nvidia_info = cls._detect_nvidia()
-        if nvidia_info:
-            return nvidia_info
-
-        # Try Apple Silicon
-        apple_info = cls._detect_apple_silicon()
-        if apple_info:
-            return apple_info
-
-        # Try AMD ROCm
-        amd_info = cls._detect_amd()
-        if amd_info:
-            return amd_info
-
-        return None
-
-    @classmethod
-    def _detect_nvidia(cls) -> Optional[Dict[str, Any]]:
-        """Detect NVIDIA GPU using nvidia-smi."""
-        try:
-            # Query GPU name and memory
-            result = subprocess.run(
-                [
-                    "nvidia-smi",
-                    "--query-gpu=name,memory.total",
-                    "--format=csv,noheader,nounits"
-                ],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-
-            if result.returncode == 0 and result.stdout.strip():
-                line = result.stdout.strip().split("\n")[0]
-                parts = line.split(", ")
-                if len(parts) >= 2:
-                    gpu_name = parts[0].strip()
-                    vram_mb = float(parts[1].strip())
-                    vram_gb = vram_mb / 1024
-
-                    return {
-                        "gpu_name": gpu_name,
-                        "vram_gb": round(vram_gb, 1),
-                        "detection_method": "nvidia_smi",
-                    }
-        except FileNotFoundError:
-            pass  # nvidia-smi not installed
-        except Exception as e:
-            logger.debug("NVIDIA detection failed: %s", e)
-
-        return None
-
-    @classmethod
-    def _detect_apple_silicon(cls) -> Optional[Dict[str, Any]]:
-        """Detect Apple Silicon (M1/M2/M3) on macOS."""
-        if sys.platform != "darwin":
-            return None
-
-        try:
-            # Check for Apple Silicon via sysctl
-            result = subprocess.run(
-                ["sysctl", "-n", "machdep.cpu.brand_string"],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-
-            if result.returncode == 0:
-                cpu_brand = result.stdout.strip()
-                if "Apple" in cpu_brand:
-                    # Get unified memory size
-                    mem_result = subprocess.run(
-                        ["sysctl", "-n", "hw.memsize"],
-                        capture_output=True,
-                        text=True,
-                        timeout=5,
-                    )
-
-                    vram_gb = None
-                    if mem_result.returncode == 0:
-                        total_bytes = int(mem_result.stdout.strip())
-                        # Apple Silicon shares RAM with GPU, estimate ~75% available
-                        vram_gb = round((total_bytes / (1024**3)) * 0.75, 1)
-
-                    return {
-                        "gpu_name": cpu_brand,
-                        "vram_gb": vram_gb,
-                        "detection_method": "apple_silicon",
-                    }
-        except Exception as e:
-            logger.debug("Apple Silicon detection failed: %s", e)
-
-        return None
-
-    @classmethod
-    def _detect_amd(cls) -> Optional[Dict[str, Any]]:
-        """Detect AMD GPU using rocm-smi."""
-        try:
-            result = subprocess.run(
-                ["rocm-smi", "--showproductname"],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-
-            if result.returncode == 0 and result.stdout.strip():
-                # Parse ROCm output
-                for line in result.stdout.split("\n"):
-                    if "GPU" in line or "Card" in line:
-                        gpu_name = line.strip()
-
-                        # Try to get VRAM
-                        vram_result = subprocess.run(
-                            ["rocm-smi", "--showmeminfo", "vram"],
-                            capture_output=True,
-                            text=True,
-                            timeout=5,
-                        )
-
-                        vram_gb = None
-                        if vram_result.returncode == 0:
-                            for vline in vram_result.stdout.split("\n"):
-                                if "Total" in vline:
-                                    # Parse VRAM in MB or GB
-                                    parts = vline.split()
-                                    for i, p in enumerate(parts):
-                                        if p.isdigit():
-                                            vram_gb = float(p) / 1024  # Assume MB
-                                            break
-
-                        return {
-                            "gpu_name": gpu_name,
-                            "vram_gb": round(vram_gb, 1) if vram_gb else None,
-                            "detection_method": "rocm_smi",
-                        }
-        except FileNotFoundError:
-            pass  # rocm-smi not installed
-        except Exception as e:
-            logger.debug("AMD detection failed: %s", e)
-
-        return None
 
     @classmethod
     def _check_backend_gpu_support(cls) -> bool:
         """Check if llama-cpp-python was built with GPU support."""
         try:
             from llama_cpp import Llama
-
-            # Check for CUDA support
-            # llama-cpp-python exposes this via the library
             import llama_cpp
 
-            # Try to detect GPU layers support
-            # If the library was built with CUBLAS/Metal, it will have these
-            lib_path = getattr(llama_cpp, "__file__", "")
-
-            # On most systems, GPU-enabled builds have different binary names
-            # or we can try creating a model with n_gpu_layers > 0
-            # For now, we'll do a simple check
-
-            # Check environment hints
-            if os.getenv("LLAMA_CUBLAS") == "1":
-                return True
-            if os.getenv("LLAMA_METAL") == "1":
-                return True
-
-            # Check if CUDA libraries are loadable
-            if sys.platform != "darwin":
-                try:
-                    import ctypes
-                    ctypes.CDLL("libcudart.so")
-                    return True
-                except OSError:
-                    pass
-            else:
-                # macOS Metal is usually available if on Apple Silicon
-                return cls._detect_apple_silicon() is not None
-
-            return False
+            # Use platform-specific backend support check
+            platform = get_platform()
+            return platform.check_gpu_backend_support()
 
         except ImportError:
             # llama-cpp-python not installed
