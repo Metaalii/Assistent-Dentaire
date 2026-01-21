@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 from app.config import MODEL_CONFIGS, get_llm_model_path, analyze_hardware, get_hardware_info
 from app.middleware import MaxRequestSizeMiddleware, SimpleRateLimitMiddleware
-from app.security import verify_api_key
+from app.security import verify_api_key, check_api_key_configured
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("dental_assistant")
@@ -33,6 +33,31 @@ app.add_middleware(MaxRequestSizeMiddleware, max_bytes=10 * 1024 * 1024)
 
 # MVP: keep class for compatibility; it is disabled unless ENABLE_DEV_RATE_LIMIT=1
 app.add_middleware(SimpleRateLimitMiddleware)
+
+
+# --- Startup Checks ---
+@app.on_event("startup")
+async def startup_checks():
+    """Run startup validation checks."""
+    # Check API key configuration
+    if not check_api_key_configured():
+        logger.warning(
+            "⚠️  APP_API_KEY environment variable not set! "
+            "All authenticated endpoints will fail. "
+            "Set APP_API_KEY to enable API authentication."
+        )
+    else:
+        logger.info("✓ API key configured")
+
+    # Log hardware detection results
+    hw_info = get_hardware_info()
+    logger.info(
+        "Hardware detected: %s (GPU: %s, VRAM: %s GB, Backend: %s)",
+        hw_info["profile"],
+        hw_info.get("gpu_name", "None"),
+        hw_info.get("vram_gb", "N/A"),
+        "supported" if hw_info.get("backend_gpu_support") else "not supported"
+    )
 
 
 # --- Business Logic ---

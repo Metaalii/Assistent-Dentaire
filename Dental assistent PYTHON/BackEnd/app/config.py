@@ -1,4 +1,3 @@
-import os
 import sys
 import logging
 from pathlib import Path
@@ -131,9 +130,6 @@ class HardwareDetector:
     def _check_backend_gpu_support(cls) -> bool:
         """Check if llama-cpp-python was built with GPU support."""
         try:
-            from llama_cpp import Llama
-            import llama_cpp
-
             # Use platform-specific backend support check
             platform = get_platform()
             return platform.check_gpu_backend_support()

@@ -76,7 +76,7 @@ const SplashScreen: React.FC = () => {
 
         {/* Loading indicator */}
         <div className="flex flex-col items-center gap-4">
-          <MedicalLoader text={t("initializing") as string} />
+          <MedicalLoader text={String(t("initializing") || "Initializing...")} />
         </div>
 
         {/* Version badge */}

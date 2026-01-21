@@ -1,4 +1,5 @@
 import logging
+import asyncio
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import PlainTextResponse
@@ -39,10 +40,10 @@ class MaxRequestSizeMiddleware(BaseHTTPMiddleware):
 
 class SimpleRateLimitMiddleware(BaseHTTPMiddleware):
     """
-    Deprecated for MVP.
+    Thread-safe rate limiting middleware (optional, disabled by default).
 
-    Kept only so older imports don't break, but it does nothing unless enabled.
-    If you *really* want it for dev, set ENABLE_DEV_RATE_LIMIT=1.
+    Kept for compatibility but disabled unless ENABLE_DEV_RATE_LIMIT=1.
+    Uses asyncio.Lock for thread-safe dictionary access.
     """
     def __init__(self, app, *args, **kwargs):
         super().__init__(app)
@@ -53,13 +54,16 @@ class SimpleRateLimitMiddleware(BaseHTTPMiddleware):
         except Exception:
             self.enabled = False
 
-        # If disabled, we don’t allocate state.
+        # If disabled, we don't allocate state.
         if self.enabled:
             import time
             self._time = time
             self.max_requests = kwargs.get("max_requests", 60)
             self.window_seconds = kwargs.get("window_seconds", 60)
             self.clients = {}  # ip -> (count, window_start)
+            self._lock = asyncio.Lock()  # Protect dictionary access
+            self._last_cleanup = time.time()
+            self._cleanup_interval = 300  # Cleanup every 5 minutes instead of clearing all
 
     async def dispatch(self, request: Request, call_next):
         if not self.enabled:
@@ -67,20 +71,37 @@ class SimpleRateLimitMiddleware(BaseHTTPMiddleware):
 
         client_host = request.client.host if request.client else "unknown"
         now = self._time.time()
-        count, start = self.clients.get(client_host, (0, now))
 
-        if now - start > self.window_seconds:
-            count, start = 0, now
+        # Thread-safe access to clients dictionary
+        async with self._lock:
+            count, start = self.clients.get(client_host, (0, now))
 
-        count += 1
-        self.clients[client_host] = (count, start)
+            # Reset window if expired
+            if now - start > self.window_seconds:
+                count, start = 0, now
 
-        if count > self.max_requests:
-            logger.warning("Rate limit exceeded for %s", client_host)
-            return PlainTextResponse("Too Many Requests", status_code=429)
+            count += 1
+            self.clients[client_host] = (count, start)
 
-        # MVP: prevent unbounded growth (very simple pruning)
-        if len(self.clients) > 5000:
-            self.clients.clear()
+            # Check if rate limit exceeded
+            if count > self.max_requests:
+                logger.warning("Rate limit exceeded for %s", client_host)
+                return PlainTextResponse("Too Many Requests", status_code=429)
+
+            # Periodic cleanup of expired entries (not all at once)
+            if now - self._last_cleanup > self._cleanup_interval:
+                self._cleanup_expired_entries(now)
+                self._last_cleanup = now
 
         return await call_next(request)
+
+    def _cleanup_expired_entries(self, now: float):
+        """Remove expired rate limit entries to prevent unbounded growth."""
+        expired = [
+            ip for ip, (_, start) in self.clients.items()
+            if now - start > self.window_seconds
+        ]
+        for ip in expired:
+            del self.clients[ip]
+        if expired:
+            logger.debug("Cleaned up %d expired rate limit entries", len(expired))

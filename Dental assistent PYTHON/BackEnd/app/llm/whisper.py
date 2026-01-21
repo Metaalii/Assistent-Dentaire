@@ -1,10 +1,8 @@
-from __future__ import annotations
-
 import asyncio
 import logging
 import threading
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional
 
 from fastapi import HTTPException
 
@@ -36,11 +34,19 @@ class LocalWhisper:
         return cls._instance
 
     def _ensure_model_dir(self) -> None:
+        """Ensure Whisper model directory exists and contains model files."""
         model_path = Path(WHISPER_MODEL_PATH)
         if not model_path.exists():
             raise HTTPException(
                 status_code=503,
-                detail=f"Whisper model not found at {model_path}. Run setup/download first.",
+                detail=f"Whisper model directory not found at {model_path}. Please download the model first.",
+            )
+
+        # Check if model files actually exist (directory could be empty)
+        if not any(model_path.iterdir()):
+            raise HTTPException(
+                status_code=503,
+                detail=f"Whisper model directory exists but is empty at {model_path}. Please download the model files.",
             )
 
     def _load_model_if_needed(self) -> None:
