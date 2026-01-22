@@ -1,9 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
 
-const BASE_URL = "http://127.0.0.1:9000";
+// Use environment variable for backend URL, fallback to default
+const BASE_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:9000";
 
-// Dev mode API key - must match APP_API_KEY env var when running backend manually
-const DEV_API_KEY = "dev-api-key-12345";
+// Use environment variable for dev API key (for browser development only)
+// In production, API key comes from Tauri backend
+const DEV_API_KEY = import.meta.env.VITE_DEV_API_KEY || "";
 
 let cachedKey: string | null = null;
 
@@ -15,10 +17,16 @@ async function getApiKey(): Promise<string> {
     cachedKey = await invoke<string>("get_api_config");
     return cachedKey!;
   } catch {
-    // Fallback to dev key when running in browser
-    console.warn("Tauri not available, using dev API key");
-    cachedKey = DEV_API_KEY;
-    return cachedKey;
+    // Fallback to dev key when running in browser (development only)
+    if (DEV_API_KEY) {
+      console.warn("Tauri not available, using dev API key from environment");
+      cachedKey = DEV_API_KEY;
+      return cachedKey;
+    } else {
+      throw new Error(
+        "API key not configured. Set VITE_DEV_API_KEY environment variable for browser development."
+      );
+    }
   }
 }
 

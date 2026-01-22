@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import asyncio
 import logging
 import threading
@@ -8,19 +6,21 @@ from typing import Optional
 
 from fastapi import HTTPException
 
-from app.config import get_llm_model_path
+from app.config import get_llm_model_path, get_hardware_info
 
 logger = logging.getLogger("dental_assistant.local_llm")
 
 
 class LocalLLM:
     """
-    MVP singleton wrapper around llama-cpp-python.
+    Singleton wrapper around llama-cpp-python with automatic GPU acceleration.
 
-    Rules:
+    Features:
     - No heavy imports at module import time
-    - Lazy model loading
+    - Lazy model loading with hardware detection
+    - Automatic GPU layer offloading based on detected hardware
     - Single in-flight inference at a time
+    - Thread-safe initialization
     """
 
     _instance: Optional["LocalLLM"] = None
@@ -64,14 +64,33 @@ class LocalLLM:
                     detail="LLM dependency not installed (llama-cpp-python). Install it to enable summarization.",
                 ) from e
 
-            logger.info("Loading LLM model from %s ...", model_path)
+            # Detect hardware and configure GPU acceleration
+            hw_info = get_hardware_info()
+            profile = hw_info["profile"]
 
-            # MVP defaults — conservative, stable
+            # Determine optimal GPU layer offloading based on hardware
+            gpu_layers = 0
+            if hw_info["gpu_detected"] and hw_info["backend_gpu_support"]:
+                if profile == "high_vram":
+                    gpu_layers = 35  # Offload most layers to GPU (8GB+ VRAM)
+                elif profile == "low_vram":
+                    gpu_layers = 20  # Offload some layers to GPU (4-8GB VRAM)
+                # cpu_only profile stays at 0 layers
+
+                logger.info(
+                    "Loading LLM model from %s with GPU acceleration (%s: %d layers)...",
+                    model_path,
+                    hw_info.get("gpu_name", "GPU"),
+                    gpu_layers
+                )
+            else:
+                logger.info("Loading LLM model from %s in CPU mode...", model_path)
+
             self._llm = Llama(
                 model_path=str(model_path),
                 n_ctx=4096,
                 n_threads=None,  # let llama.cpp decide
-                n_gpu_layers=0,  # CPU-only MVP (safe default)
+                n_gpu_layers=gpu_layers,
                 verbose=False,
             )
 
