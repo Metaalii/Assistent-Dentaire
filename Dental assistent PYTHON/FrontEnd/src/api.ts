@@ -3,9 +3,13 @@ import { invoke } from "@tauri-apps/api/core";
 // Use environment variable for backend URL, fallback to default
 const BASE_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:9000";
 
-// Use environment variable for dev API key (for browser development only)
-// In production, API key comes from Tauri backend
-const DEV_API_KEY = import.meta.env.VITE_DEV_API_KEY || "";
+// Default development API key for local development
+// This is safe because the app runs entirely on localhost
+const DEFAULT_DEV_KEY = "dental-assistant-local-dev-key";
+
+// Use environment variable for dev API key, or fall back to default for local development
+// In production Tauri app, API key comes from the backend
+const DEV_API_KEY = import.meta.env.VITE_DEV_API_KEY || DEFAULT_DEV_KEY;
 
 let cachedKey: string | null = null;
 
@@ -17,16 +21,10 @@ async function getApiKey(): Promise<string> {
     cachedKey = await invoke<string>("get_api_config");
     return cachedKey!;
   } catch {
-    // Fallback to dev key when running in browser (development only)
-    if (DEV_API_KEY) {
-      console.warn("Tauri not available, using dev API key from environment");
-      cachedKey = DEV_API_KEY;
-      return cachedKey;
-    } else {
-      throw new Error(
-        "API key not configured. Set VITE_DEV_API_KEY environment variable for browser development."
-      );
-    }
+    // Fallback to dev key when running in browser (local development)
+    console.warn("Tauri not available, using development API key");
+    cachedKey = DEV_API_KEY;
+    return cachedKey;
   }
 }
 
