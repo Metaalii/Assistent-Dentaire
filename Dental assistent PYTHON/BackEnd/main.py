@@ -115,6 +115,30 @@ def _atomic_download(url: str, dest_path: Path) -> None:
         raise
 
 
+def _is_model_valid(model_path: Path, expected_size_gb: float) -> bool:
+    """
+    Check if the model file exists and has a reasonable size.
+    Returns False for missing, empty, or corrupted (too small) files.
+    """
+    if not model_path.exists():
+        return False
+
+    # Check file size - should be at least 80% of expected size
+    # This catches partial downloads and corrupted files
+    file_size_gb = model_path.stat().st_size / (1024 ** 3)
+    min_expected = expected_size_gb * 0.8
+
+    if file_size_gb < min_expected:
+        logger.warning(
+            "Model file appears incomplete: %.2f GB (expected ~%.1f GB). "
+            "Consider re-downloading.",
+            file_size_gb, expected_size_gb
+        )
+        return False
+
+    return True
+
+
 @app.get("/setup/check-models")
 async def check_models():
     # Get detailed hardware info from tiered detection
@@ -122,16 +146,19 @@ async def check_models():
     profile = hw_info["profile"]
     cfg = MODEL_CONFIGS[profile]
     model_path = get_llm_model_path(profile)
-    downloaded = model_path.exists()
+    expected_size = cfg.get("size_gb", 0)
+
+    # Validate model file exists AND has correct size
+    is_valid = _is_model_valid(model_path, expected_size)
 
     return {
         # Core info
         "hardware_profile": profile,
-        "is_downloaded": downloaded,
-        "model_exists": downloaded,  # backward compat
+        "is_downloaded": is_valid,
+        "model_exists": is_valid,  # backward compat
         "recommended_model": cfg["filename"],
         "download_url": cfg["url"],
-        "model_size_gb": cfg.get("size_gb"),
+        "model_size_gb": expected_size,
         "model_description": cfg.get("description"),
         # Detailed hardware info
         "gpu_detected": hw_info.get("gpu_detected", False),
@@ -145,17 +172,29 @@ async def check_models():
 @app.post("/setup/download-model", dependencies=[Depends(verify_api_key)])
 async def download_model(background_tasks: BackgroundTasks):
     profile = analyze_hardware()
+    cfg = MODEL_CONFIGS[profile]
     model_path = get_llm_model_path(profile)
+    expected_size = cfg.get("size_gb", 0)
 
-    if model_path.exists():
+    # Check if model is already valid (exists + correct size)
+    if _is_model_valid(model_path, expected_size):
         return {"status": "already_exists"}
 
-    url = MODEL_CONFIGS[profile]["url"]
+    # Remove incomplete/corrupted file if it exists
+    if model_path.exists():
+        logger.info("Removing incomplete model file before re-download: %s", model_path)
+        model_path.unlink()
 
+    url = cfg["url"]
     background_tasks.add_task(_atomic_download, url, model_path)
     return {"status": "started", "profile": profile}
 
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "models_ready": get_llm_model_path().exists()}
+    profile = analyze_hardware()
+    cfg = MODEL_CONFIGS[profile]
+    model_path = get_llm_model_path(profile)
+    expected_size = cfg.get("size_gb", 0)
+    models_ready = _is_model_valid(model_path, expected_size)
+    return {"status": "ok", "models_ready": models_ready}
