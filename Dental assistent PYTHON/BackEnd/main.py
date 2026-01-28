@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 from app.config import MODEL_CONFIGS, get_llm_model_path, analyze_hardware, get_hardware_info
 from app.middleware import MaxRequestSizeMiddleware, SimpleRateLimitMiddleware
-from app.security import verify_api_key, check_api_key_configured
+from app.security import verify_api_key, check_api_key_configured, is_using_dev_key
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("dental_assistant")
@@ -40,11 +40,10 @@ app.add_middleware(SimpleRateLimitMiddleware)
 async def startup_checks():
     """Run startup validation checks."""
     # Check API key configuration
-    if not check_api_key_configured():
-        logger.warning(
-            "⚠️  APP_API_KEY environment variable not set! "
-            "All authenticated endpoints will fail. "
-            "Set APP_API_KEY to enable API authentication."
+    if is_using_dev_key():
+        logger.info(
+            "⚠️  Using default dev API key. "
+            "Set APP_API_KEY environment variable for production."
         )
     else:
         logger.info("✓ API key configured")

@@ -5,7 +5,8 @@ const BASE_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:9000";
 
 // Use environment variable for dev API key (for browser development only)
 // In production, API key comes from Tauri backend
-const DEV_API_KEY = import.meta.env.VITE_DEV_API_KEY || "";
+// Default dev key is used when no environment variable is set
+const DEV_API_KEY = import.meta.env.VITE_DEV_API_KEY || "dev-dental-assistant-key";
 
 let cachedKey: string | null = null;
 

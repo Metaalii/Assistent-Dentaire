@@ -5,6 +5,10 @@ import logging
 
 logger = logging.getLogger("dental_assistant.security")
 
+# Default development API key - used when APP_API_KEY is not set
+# This allows easy local development without manual configuration
+DEV_API_KEY = "dev-dental-assistant-key"
+
 # Centralized auth helpers to avoid circular imports
 # Read the API key at verification time (not import time) so tests and
 # runtime which set APP_API_KEY after import continue to work.
@@ -16,17 +20,14 @@ async def verify_api_key(api_key: str = Security(api_key_header)):
     Verify the API key from request headers.
 
     Raises:
-        HTTPException: 500 if API key not configured, 403 if invalid key
+        HTTPException: 403 if invalid key
     """
     expected = os.getenv("APP_API_KEY")
 
-    # Server misconfiguration - API key not set
+    # Use default dev key if not configured
     if expected is None:
-        logger.error("APP_API_KEY environment variable not set!")
-        raise HTTPException(
-            status_code=500,
-            detail="Server misconfiguration: API authentication not properly configured"
-        )
+        logger.warning("APP_API_KEY not set, using default dev key")
+        expected = DEV_API_KEY
 
     # Invalid API key provided
     if api_key != expected:
@@ -42,6 +43,11 @@ async def verify_api_key(api_key: str = Security(api_key_header)):
 def check_api_key_configured() -> bool:
     """
     Check if API key is configured at startup.
-    Returns True if configured, False otherwise.
+    Returns True always (uses default dev key if not set).
     """
-    return os.getenv("APP_API_KEY") is not None
+    return True
+
+
+def is_using_dev_key() -> bool:
+    """Check if using the default development key."""
+    return os.getenv("APP_API_KEY") is None
