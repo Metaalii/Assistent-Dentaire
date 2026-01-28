@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { summarizeText, transcribeAudio } from "../api";
+import { useProfile } from "../hooks/useProfile";
 import {
   Button,
   Card,
@@ -21,6 +22,7 @@ import {
   XIcon,
   HeartPulseIcon,
   StopIcon,
+  DownloadIcon,
 } from "./ui/Icons";
 
 const ALLOWED_EXTS = new Set(["wav", "mp3", "m4a", "ogg", "webm", "mp4"]);
@@ -620,9 +622,10 @@ export default function MainDashboard() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [transcript, setTranscript] = useState<string | null>(null);
-  const [summary, setSummary] = useState<string | null>(null);
+  const [document, setDocument] = useState<string | null>(null);
   const [isDragActive, setIsDragActive] = useState(false);
 
+  const { getDocumentHeader, getDocumentFooter } = useProfile();
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const processFile = async (file: File) => {
@@ -636,19 +639,58 @@ export default function MainDashboard() {
     setIsLoading(true);
     setError(null);
     setTranscript(null);
-    setSummary(null);
+    setDocument(null);
 
     try {
       const tr = await transcribeAudio(file);
       setTranscript(tr.text);
 
       const sum = await summarizeText(tr.text);
-      setSummary(sum.summary);
+      // Combine header + generated content + footer
+      const fullDocument = `${getDocumentHeader()}
+
+${sum.summary}
+
+${getDocumentFooter()}`;
+      setDocument(fullDocument);
     } catch (e) {
       console.error(e);
       setError(e instanceof Error ? e.message : "An error occurred. Please try again.");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleExportPDF = () => {
+    if (!document) return;
+
+    // Create a printable window
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Document Dentaire</title>
+          <style>
+            body {
+              font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+              padding: 40px;
+              max-width: 800px;
+              margin: 0 auto;
+              line-height: 1.6;
+              white-space: pre-wrap;
+            }
+            @media print {
+              body { padding: 20px; }
+            }
+          </style>
+        </head>
+        <body>${document.replace(/\n/g, '<br>')}</body>
+        </html>
+      `);
+      printWindow.document.close();
+      printWindow.print();
     }
   };
 
@@ -673,10 +715,10 @@ export default function MainDashboard() {
     setFileName(null);
     setError(null);
     setTranscript(null);
-    setSummary(null);
+    setDocument(null);
   };
 
-  const hasContent = !!(transcript || summary || error);
+  const hasContent = !!(transcript || document || error);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#f8fafc] via-[#e6f4f9] to-[#f8fafc]">
@@ -728,49 +770,51 @@ export default function MainDashboard() {
               </section>
             )}
 
-            {/* Results section */}
-            {(transcript || summary) && !isLoading && (
+            {/* Document section */}
+            {document && !isLoading && (
               <section className="animate-fade-in-up">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {/* Transcript card */}
-                  <ResultCard
-                    title="Transcript"
-                    content={transcript}
-                    icon={<DocumentIcon className="text-white" size={20} />}
-                    gradientFrom="from-[#35a7d3]"
-                    gradientTo="to-[#2584ae]"
-                    isPending={!transcript}
-                  />
-
-                  {/* Summary card */}
-                  <ResultCard
-                    title="Medical Summary"
-                    content={summary}
-                    icon={<SparklesIcon className="text-white" size={20} />}
-                    gradientFrom="from-[#00bdb8]"
-                    gradientTo="to-[#009a94]"
-                    isPending={!summary}
-                  />
-                </div>
+                <Card className="overflow-hidden">
+                  <CardHeader icon={<DocumentIcon className="text-white" size={20} />}>
+                    <div>
+                      <h2 className="font-semibold text-[#1e293b]">Document Généré</h2>
+                      <p className="text-xs text-[#64748b]">Modifiable avant export</p>
+                    </div>
+                  </CardHeader>
+                  <CardBody>
+                    <textarea
+                      value={document}
+                      onChange={(e) => setDocument(e.target.value)}
+                      className="w-full h-96 p-4 border-2 border-[#e2e8f0] rounded-xl bg-white text-[#1e293b] font-mono text-sm leading-relaxed resize-y focus:border-[#35a7d3] focus:ring-2 focus:ring-[#35a7d3]/20 outline-none"
+                      placeholder="Document généré..."
+                    />
+                  </CardBody>
+                </Card>
 
                 {/* Quick actions */}
                 <div className="mt-6 flex flex-wrap justify-center gap-4">
                   <Button
-                    variant="secondary"
-                    onClick={() => inputRef.current?.click()}
-                    leftIcon={<MicrophoneIcon size={18} />}
+                    variant="primary"
+                    onClick={handleExportPDF}
+                    leftIcon={<DownloadIcon size={18} />}
                   >
-                    Upload Another Recording
+                    Exporter en PDF
                   </Button>
                   <Button
-                    variant="ghost"
+                    variant="secondary"
                     onClick={() => {
-                      if (summary) {
-                        navigator.clipboard.writeText(summary);
+                      if (document) {
+                        navigator.clipboard.writeText(document);
                       }
                     }}
                   >
-                    Copy Summary
+                    Copier le document
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    onClick={() => inputRef.current?.click()}
+                    leftIcon={<MicrophoneIcon size={18} />}
+                  >
+                    Nouvel enregistrement
                   </Button>
                 </div>
               </section>
@@ -784,21 +828,21 @@ export default function MainDashboard() {
                     <div className="w-8 h-8 rounded-lg bg-[#f1f5f9] flex items-center justify-center">
                       <span className="text-sm font-bold">1</span>
                     </div>
-                    <span className="text-sm">Upload audio</span>
+                    <span className="text-sm">Télécharger audio</span>
                   </div>
                   <div className="w-8 h-0.5 bg-[#e2e8f0] self-center rounded" />
                   <div className="flex items-center gap-2 text-[#94a3b8]">
                     <div className="w-8 h-8 rounded-lg bg-[#f1f5f9] flex items-center justify-center">
                       <span className="text-sm font-bold">2</span>
                     </div>
-                    <span className="text-sm">AI transcribes</span>
+                    <span className="text-sm">Transcription IA</span>
                   </div>
                   <div className="w-8 h-0.5 bg-[#e2e8f0] self-center rounded" />
                   <div className="flex items-center gap-2 text-[#94a3b8]">
                     <div className="w-8 h-8 rounded-lg bg-[#f1f5f9] flex items-center justify-center">
                       <span className="text-sm font-bold">3</span>
                     </div>
-                    <span className="text-sm">Get summary</span>
+                    <span className="text-sm">Document généré</span>
                   </div>
                 </div>
               </section>

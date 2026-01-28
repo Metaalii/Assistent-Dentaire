@@ -148,12 +148,11 @@ class LocalLLM:
         assert self._llm is not None
 
         # Extract the actual text content from the prompt
-        # Look for "TRANSCRIPTION:" marker in our French prompt format
-        if "TRANSCRIPTION:" in prompt:
-            parts = prompt.split("TRANSCRIPTION:", 1)
-            text = parts[1].split("RÉSUMÉ MÉDICAL:")[0].strip() if "RÉSUMÉ MÉDICAL:" in parts[1] else parts[1].strip()
+        # Find the transcription text after the prompt header
+        if "Transcription de la consultation:" in prompt:
+            text = prompt.split("Transcription de la consultation:")[-1].strip()
         elif ":\n" in prompt:
-            prefix, text = prompt.split(":\n", 1)
+            _, text = prompt.split(":\n", 1)
         else:
             text = prompt
 
@@ -162,13 +161,7 @@ class LocalLLM:
 
         chunk_summaries = []
         for i, chunk in enumerate(chunks):
-            chunk_prompt = f"""Résumez cette partie ({i+1}/{len(chunks)}) d'une consultation dentaire en français.
-Extrayez les informations clés (symptômes, diagnostics, traitements mentionnés).
-
-TEXTE:
-{chunk}
-
-RÉSUMÉ:"""
+            chunk_prompt = f"Résume cette partie ({i+1}/{len(chunks)}) d'une consultation dentaire en français:\n{chunk}"
 
             result = self._llm(
                 chunk_prompt,
@@ -184,22 +177,24 @@ RÉSUMÉ:"""
                 logger.warning("Failed to summarize chunk %d", i+1)
                 continue
 
-        # Combine chunk summaries into final summary
+        # Combine chunk summaries into final SmartNote
         if len(chunk_summaries) == 1:
             return chunk_summaries[0]
 
         combined = "\n\n".join(chunk_summaries)
-        final_prompt = f"""Combinez ces résumés partiels en un seul résumé cohérent de consultation dentaire.
-Organisez le résumé final avec:
-- Motif de consultation
-- Diagnostic ou observations cliniques
-- Plan de traitement proposé
-- Prochains rendez-vous ou suivis
+        final_prompt = f"""Combine ces résumés partiels en une SmartNote dentaire concise (5-10 lignes) en français:
 
-RÉSUMÉS PARTIELS:
 {combined}
 
-RÉSUMÉ FINAL:"""
+Format:
+Motif : ...
+• Antécédents : ...
+• Examen : ...
+• Plan de traitement : ...
+• Risques : ...
+• Recommandations : ...
+• Prochaine étape : ...
+• Administratif : ..."""
 
         result = self._llm(
             final_prompt,
@@ -218,7 +213,7 @@ RÉSUMÉ FINAL:"""
 
         result = self._llm(
             prompt,
-            max_tokens=800,
+            max_tokens=1024,  # Increased for longer French documents
             stop=["<|eot_id|>", "<|end_of_text|>"],
         )
 

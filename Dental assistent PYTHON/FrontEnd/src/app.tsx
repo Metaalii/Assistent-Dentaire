@@ -2,12 +2,15 @@ import React, { useEffect, useState } from "react";
 import ModelSetup from "./components/ModelSetup";
 import MainDashboard from "./components/MainDashboard";
 import LanguageSelector from "./components/LanguageSelector";
+import ProfileSetup from "./components/ProfileSetup";
 import { LanguageProvider, useLanguage } from "./i18n";
 import { ToothIcon, HeartPulseIcon, AlertCircleIcon, RefreshIcon } from "./components/ui/Icons";
 import { Button, MedicalLoader } from "./components/ui";
+import { DentistProfile } from "./hooks/useProfile";
 
 type BootState =
   | { state: "language" }
+  | { state: "profile" }
   | { state: "starting" }
   | { state: "setup" }
   | { state: "ready" }
@@ -160,12 +163,21 @@ const ErrorScreen: React.FC<ErrorScreenProps> = ({ message, onRetry }) => {
 // APP CONTENT (inside LanguageProvider)
 // ============================================
 const LANGUAGE_SELECTED_KEY = "dental-assistant-language-selected";
+const PROFILE_KEY = "dental-assistant-profile";
 
 function AppContent() {
   const [boot, setBoot] = useState<BootState>(() => {
     // Check if language was already selected
-    const wasSelected = localStorage.getItem(LANGUAGE_SELECTED_KEY);
-    return wasSelected ? { state: "starting" } : { state: "language" };
+    const languageSelected = localStorage.getItem(LANGUAGE_SELECTED_KEY);
+    if (!languageSelected) {
+      return { state: "language" };
+    }
+    // Check if profile was already set up
+    const profileSet = localStorage.getItem(PROFILE_KEY);
+    if (!profileSet) {
+      return { state: "profile" };
+    }
+    return { state: "starting" };
   });
 
   useEffect(() => {
@@ -193,11 +205,21 @@ function AppContent() {
 
   const handleLanguageSelected = () => {
     localStorage.setItem(LANGUAGE_SELECTED_KEY, "true");
+    // After language, go to profile setup
+    setBoot({ state: "profile" });
+  };
+
+  const handleProfileComplete = (profile: DentistProfile) => {
+    localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
     setBoot({ state: "starting" });
   };
 
   if (boot.state === "language") {
     return <LanguageSelector onComplete={handleLanguageSelected} />;
+  }
+
+  if (boot.state === "profile") {
+    return <ProfileSetup onComplete={handleProfileComplete} />;
   }
 
   if (boot.state === "starting") {

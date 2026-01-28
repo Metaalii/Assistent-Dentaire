@@ -68,6 +68,25 @@ class SummaryRequest(BaseModel):
     text: str
 
 
+SMARTNOTE_PROMPT = """Tu es un assistant dentaire professionnel français. À partir de la transcription suivante d'une consultation dentaire, génère une SmartNote concise de 5 à 10 lignes.
+
+Format de la SmartNote:
+Patient envoyé par Dr… (cabinet…)
+Motif : [motif de consultation]
+• Antécédents : [antécédents médicaux et dentaires pertinents]
+• Examen : [observations cliniques principales]
+• Plan de traitement : [traitements proposés]
+• Risques : [risques identifiés]
+• Recommandations : [conseils au patient]
+• Prochaine étape : [prochains rendez-vous ou actions]
+• Administratif : [informations sur devis, paiement, etc.]
+
+Transcription de la consultation:
+{text}
+
+Génère uniquement la SmartNote en français, sans commentaires supplémentaires."""
+
+
 @app.post("/summarize", dependencies=[Depends(verify_api_key)])
 async def summarize(req: SummaryRequest):
     if not get_llm_model_path().exists():
@@ -77,16 +96,7 @@ async def summarize(req: SummaryRequest):
     from app.llm.local_llm import LocalLLM  # noqa: WPS433
 
     llm = LocalLLM()
-    prompt = f"""Résumez cette consultation dentaire en français. Incluez:
-- Motif de consultation
-- Diagnostic ou observations cliniques
-- Plan de traitement proposé
-- Prochains rendez-vous ou suivis prévus
-
-TRANSCRIPTION:
-{req.text}
-
-RÉSUMÉ MÉDICAL:"""
+    prompt = SMARTNOTE_PROMPT.format(text=req.text)
     summary = await llm.generate(prompt)
     return {"summary": summary}
 
