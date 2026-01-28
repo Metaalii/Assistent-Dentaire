@@ -95,12 +95,12 @@ class LocalLLM:
             )
 
     def _estimate_tokens(self, text: str) -> int:
-        """Rough token estimation: ~4 characters per token for English."""
-        return len(text) // 4
+        """Rough token estimation: ~3 characters per token for French/multilingual text."""
+        return len(text) // 3
 
-    def _chunk_text(self, text: str, max_chunk_tokens: int = 3000) -> list[str]:
+    def _chunk_text(self, text: str, max_chunk_tokens: int = 2500) -> list[str]:
         """Split text into chunks that fit within token limits."""
-        max_chars = max_chunk_tokens * 4  # Approximate chars per chunk
+        max_chars = max_chunk_tokens * 3  # Approximate chars per chunk (conservative for French)
 
         # Split by sentences to avoid cutting mid-sentence
         sentences = text.replace('\n', ' ').split('. ')
@@ -148,11 +148,13 @@ class LocalLLM:
         assert self._llm is not None
 
         # Extract the actual text content from the prompt
-        # Assuming prompt format: "ANALYSE THIS MEDICAL CONSULTATION:\n{text}"
-        if ":\n" in prompt:
+        # Look for "TRANSCRIPTION:" marker in our French prompt format
+        if "TRANSCRIPTION:" in prompt:
+            parts = prompt.split("TRANSCRIPTION:", 1)
+            text = parts[1].split("RÉSUMÉ MÉDICAL:")[0].strip() if "RÉSUMÉ MÉDICAL:" in parts[1] else parts[1].strip()
+        elif ":\n" in prompt:
             prefix, text = prompt.split(":\n", 1)
         else:
-            prefix = "ANALYSE THIS MEDICAL CONSULTATION"
             text = prompt
 
         chunks = self._chunk_text(text)
@@ -160,12 +162,18 @@ class LocalLLM:
 
         chunk_summaries = []
         for i, chunk in enumerate(chunks):
-            chunk_prompt = f"Summarize this part ({i+1}/{len(chunks)}) of a medical consultation:\n{chunk}"
+            chunk_prompt = f"""Résumez cette partie ({i+1}/{len(chunks)}) d'une consultation dentaire en français.
+Extrayez les informations clés (symptômes, diagnostics, traitements mentionnés).
+
+TEXTE:
+{chunk}
+
+RÉSUMÉ:"""
 
             result = self._llm(
                 chunk_prompt,
-                max_tokens=400,
-                stop=["</s>"],
+                max_tokens=500,
+                stop=["<|eot_id|>", "<|end_of_text|>"],
             )
 
             try:
@@ -181,12 +189,22 @@ class LocalLLM:
             return chunk_summaries[0]
 
         combined = "\n\n".join(chunk_summaries)
-        final_prompt = f"Combine these partial summaries into one coherent medical consultation summary:\n\n{combined}"
+        final_prompt = f"""Combinez ces résumés partiels en un seul résumé cohérent de consultation dentaire.
+Organisez le résumé final avec:
+- Motif de consultation
+- Diagnostic ou observations cliniques
+- Plan de traitement proposé
+- Prochains rendez-vous ou suivis
+
+RÉSUMÉS PARTIELS:
+{combined}
+
+RÉSUMÉ FINAL:"""
 
         result = self._llm(
             final_prompt,
-            max_tokens=800,
-            stop=["</s>"],
+            max_tokens=1000,
+            stop=["<|eot_id|>", "<|end_of_text|>"],
         )
 
         try:
@@ -200,8 +218,8 @@ class LocalLLM:
 
         result = self._llm(
             prompt,
-            max_tokens=512,
-            stop=["</s>"],
+            max_tokens=800,
+            stop=["<|eot_id|>", "<|end_of_text|>"],
         )
 
         try:
