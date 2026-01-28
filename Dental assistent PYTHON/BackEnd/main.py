@@ -41,13 +41,12 @@ async def startup_checks():
     """Run startup validation checks."""
     # Check API key configuration
     if not check_api_key_configured():
-        logger.warning(
-            "⚠️  APP_API_KEY environment variable not set! "
-            "All authenticated endpoints will fail. "
-            "Set APP_API_KEY to enable API authentication."
+        logger.info(
+            "ℹ️  Using default development API key. "
+            "Set APP_API_KEY environment variable for production use."
         )
     else:
-        logger.info("✓ API key configured")
+        logger.info("✓ API key configured from environment")
 
     # Log hardware detection results
     hw_info = get_hardware_info()
