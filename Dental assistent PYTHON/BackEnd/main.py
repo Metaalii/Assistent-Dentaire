@@ -77,7 +77,16 @@ async def summarize(req: SummaryRequest):
     from app.llm.local_llm import LocalLLM  # noqa: WPS433
 
     llm = LocalLLM()
-    prompt = f"ANALYSE THIS MEDICAL CONSULTATION:\n{req.text}"
+    prompt = f"""Résumez cette consultation dentaire en français. Incluez:
+- Motif de consultation
+- Diagnostic ou observations cliniques
+- Plan de traitement proposé
+- Prochains rendez-vous ou suivis prévus
+
+TRANSCRIPTION:
+{req.text}
+
+RÉSUMÉ MÉDICAL:"""
     summary = await llm.generate(prompt)
     return {"summary": summary}
 
