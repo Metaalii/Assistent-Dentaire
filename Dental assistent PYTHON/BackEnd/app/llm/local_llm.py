@@ -88,21 +88,112 @@ class LocalLLM:
 
             self._llm = Llama(
                 model_path=str(model_path),
-                n_ctx=4096,
+                n_ctx=8192,  # Increased for longer transcriptions
                 n_threads=None,  # let llama.cpp decide
                 n_gpu_layers=gpu_layers,
                 verbose=False,
             )
 
+    def _estimate_tokens(self, text: str) -> int:
+        """Rough token estimation: ~4 characters per token for English."""
+        return len(text) // 4
+
+    def _chunk_text(self, text: str, max_chunk_tokens: int = 3000) -> list[str]:
+        """Split text into chunks that fit within token limits."""
+        max_chars = max_chunk_tokens * 4  # Approximate chars per chunk
+
+        # Split by sentences to avoid cutting mid-sentence
+        sentences = text.replace('\n', ' ').split('. ')
+        chunks = []
+        current_chunk = ""
+
+        for sentence in sentences:
+            sentence = sentence.strip()
+            if not sentence:
+                continue
+            sentence_with_period = sentence + ". "
+
+            if len(current_chunk) + len(sentence_with_period) > max_chars:
+                if current_chunk:
+                    chunks.append(current_chunk.strip())
+                current_chunk = sentence_with_period
+            else:
+                current_chunk += sentence_with_period
+
+        if current_chunk.strip():
+            chunks.append(current_chunk.strip())
+
+        return chunks if chunks else [text]
+
     async def generate(self, prompt: str) -> str:
         """
         Generate text from the local LLM.
         Enforces single in-flight inference.
+        Handles long text by chunking if necessary.
         """
         self._load_model_if_needed()
 
         async with self._inference_semaphore:
-            return await asyncio.to_thread(self._generate_sync, prompt)
+            # Check if text is too long and needs chunking
+            estimated_tokens = self._estimate_tokens(prompt)
+
+            if estimated_tokens > 6000:  # Leave room for response tokens
+                logger.info("Long text detected (%d estimated tokens), using chunked summarization", estimated_tokens)
+                return await asyncio.to_thread(self._generate_chunked_sync, prompt)
+            else:
+                return await asyncio.to_thread(self._generate_sync, prompt)
+
+    def _generate_chunked_sync(self, prompt: str) -> str:
+        """Handle long transcriptions by chunking and combining summaries."""
+        assert self._llm is not None
+
+        # Extract the actual text content from the prompt
+        # Assuming prompt format: "ANALYSE THIS MEDICAL CONSULTATION:\n{text}"
+        if ":\n" in prompt:
+            prefix, text = prompt.split(":\n", 1)
+        else:
+            prefix = "ANALYSE THIS MEDICAL CONSULTATION"
+            text = prompt
+
+        chunks = self._chunk_text(text)
+        logger.info("Split transcription into %d chunks", len(chunks))
+
+        chunk_summaries = []
+        for i, chunk in enumerate(chunks):
+            chunk_prompt = f"Summarize this part ({i+1}/{len(chunks)}) of a medical consultation:\n{chunk}"
+
+            result = self._llm(
+                chunk_prompt,
+                max_tokens=400,
+                stop=["</s>"],
+            )
+
+            try:
+                summary = result["choices"][0]["text"].strip()
+                chunk_summaries.append(summary)
+                logger.debug("Chunk %d/%d summarized", i+1, len(chunks))
+            except Exception:
+                logger.warning("Failed to summarize chunk %d", i+1)
+                continue
+
+        # Combine chunk summaries into final summary
+        if len(chunk_summaries) == 1:
+            return chunk_summaries[0]
+
+        combined = "\n\n".join(chunk_summaries)
+        final_prompt = f"Combine these partial summaries into one coherent medical consultation summary:\n\n{combined}"
+
+        result = self._llm(
+            final_prompt,
+            max_tokens=800,
+            stop=["</s>"],
+        )
+
+        try:
+            return result["choices"][0]["text"].strip()
+        except Exception:
+            # If final combination fails, return joined summaries
+            return "\n\n".join(chunk_summaries)
 
     def _generate_sync(self, prompt: str) -> str:
         assert self._llm is not None  # guaranteed by _load_model_if_needed()

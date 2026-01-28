@@ -352,11 +352,11 @@ const LiveRecorder: React.FC<LiveRecorderProps> = ({ onRecordingComplete, isProc
       hover={!isProcessing}
     >
       {/* Gradient background */}
-      <div className="absolute inset-0 bg-gradient-to-br from-[#fef3e6]/50 via-white to-[#fee6e6]/50 pointer-events-none" />
+      <div className="absolute inset-0 bg-gradient-to-br from-[#e6f4f9]/50 via-white to-[#e0f7f6]/50 pointer-events-none" />
 
       {/* Decorative circles */}
-      <div className="absolute -top-20 -left-20 w-40 h-40 bg-gradient-to-br from-[#f97316]/10 to-transparent rounded-full blur-2xl pointer-events-none" />
-      <div className="absolute -bottom-20 -right-20 w-40 h-40 bg-gradient-to-tr from-[#ef4444]/10 to-transparent rounded-full blur-2xl pointer-events-none" />
+      <div className="absolute -top-20 -left-20 w-40 h-40 bg-gradient-to-br from-[#35a7d3]/10 to-transparent rounded-full blur-2xl pointer-events-none" />
+      <div className="absolute -bottom-20 -right-20 w-40 h-40 bg-gradient-to-tr from-[#00bdb8]/10 to-transparent rounded-full blur-2xl pointer-events-none" />
 
       <CardBody className="relative">
         <div className="flex flex-col items-center justify-center py-8">
@@ -371,7 +371,7 @@ const LiveRecorder: React.FC<LiveRecorderProps> = ({ onRecordingComplete, isProc
                   : "bg-gradient-to-br from-[#ef4444] to-[#dc2626] animate-pulse"
                 : audioUrl
                   ? "bg-gradient-to-br from-[#10b981] to-[#059669]"
-                  : "bg-gradient-to-br from-[#f97316] to-[#ea580c]"
+                  : "bg-gradient-to-br from-[#35a7d3] to-[#00bdb8]"
               }
             `}
           >
@@ -414,7 +414,7 @@ const LiveRecorder: React.FC<LiveRecorderProps> = ({ onRecordingComplete, isProc
               {[...Array(12)].map((_, i) => (
                 <div
                   key={i}
-                  className="w-1 bg-[#ef4444] rounded-full animate-pulse"
+                  className="w-1 bg-[#35a7d3] rounded-full animate-pulse"
                   style={{
                     height: `${Math.random() * 24 + 8}px`,
                     animationDelay: `${i * 0.1}s`,
@@ -446,7 +446,6 @@ const LiveRecorder: React.FC<LiveRecorderProps> = ({ onRecordingComplete, isProc
                 variant="primary"
                 onClick={startRecording}
                 leftIcon={<MicrophoneIcon size={18} />}
-                className="bg-gradient-to-r from-[#f97316] to-[#ea580c] hover:from-[#ea580c] hover:to-[#dc2626]"
               >
                 Start Recording
               </Button>
@@ -512,8 +511,8 @@ const LiveRecorder: React.FC<LiveRecorderProps> = ({ onRecordingComplete, isProc
       </CardBody>
 
       {/* Info footer */}
-      <div className="px-6 py-3 bg-[#fef9f3] border-t border-[#fed7aa] text-center">
-        <p className="text-xs text-[#9a3412]">
+      <div className="px-6 py-3 bg-[#f8fafc] border-t border-[#e2e8f0] text-center">
+        <p className="text-xs text-[#94a3b8]">
           Recording is processed locally on your device
         </p>
       </div>
