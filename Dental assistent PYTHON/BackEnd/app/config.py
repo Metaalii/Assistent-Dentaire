@@ -181,21 +181,21 @@ def get_device_settings() -> Tuple[str, str]:
 
 MODEL_CONFIGS = {
     "high_vram": {
-        "url": "https://huggingface.co/TheBloke/Llama-3-8B-Instruct-GGUF/resolve/main/llama-3-8b-instruct.Q6_K.gguf",
-        "filename": "llama-3-8b-instruct.Q6_K.gguf",
+        "url": "https://huggingface.co/bartowski/Meta-Llama-3-8B-Instruct-GGUF/resolve/main/Meta-Llama-3-8B-Instruct-Q6_K.gguf",
+        "filename": "Meta-Llama-3-8B-Instruct-Q6_K.gguf",
         "size_gb": 6.6,
         "description": "Highest quality, best for powerful GPUs",
     },
     "low_vram": {
-        "url": "https://huggingface.co/TheBloke/Llama-3-8B-Instruct-GGUF/resolve/main/llama-3-8b-instruct.Q4_K_M.gguf",
-        "filename": "llama-3-8b-instruct.Q4_K_M.gguf",
-        "size_gb": 4.4,
+        "url": "https://huggingface.co/bartowski/Meta-Llama-3-8B-Instruct-GGUF/resolve/main/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf",
+        "filename": "Meta-Llama-3-8B-Instruct-Q4_K_M.gguf",
+        "size_gb": 4.9,
         "description": "Balanced quality and speed",
     },
     "cpu_only": {
-        "url": "https://huggingface.co/TheBloke/Llama-3-8B-Instruct-GGUF/resolve/main/llama-3-8b-instruct.Q4_K_S.gguf",
-        "filename": "llama-3-8b-instruct.Q4_K_S.gguf",
-        "size_gb": 3.6,
+        "url": "https://huggingface.co/bartowski/Meta-Llama-3-8B-Instruct-GGUF/resolve/main/Meta-Llama-3-8B-Instruct-Q4_K_S.gguf",
+        "filename": "Meta-Llama-3-8B-Instruct-Q4_K_S.gguf",
+        "size_gb": 4.6,
         "description": "Optimized for CPU, smallest size",
     },
 }

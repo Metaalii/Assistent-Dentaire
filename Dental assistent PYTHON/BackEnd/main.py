@@ -1,8 +1,12 @@
 import logging
+import os
 import shutil
 from pathlib import Path
 
 import requests
+from dotenv import load_dotenv
+
+load_dotenv()
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -29,7 +33,7 @@ app.add_middleware(
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["X-API-Key", "Content-Type"],
 )
-app.add_middleware(MaxRequestSizeMiddleware, max_bytes=10 * 1024 * 1024)
+app.add_middleware(MaxRequestSizeMiddleware, max_bytes=100 * 1024 * 1024)
 
 # MVP: keep class for compatibility; it is disabled unless ENABLE_DEV_RATE_LIMIT=1
 app.add_middleware(SimpleRateLimitMiddleware)
@@ -95,8 +99,13 @@ def _atomic_download(url: str, dest_path: Path) -> None:
 
     logger.info("Downloading model: %s -> %s", url, dest_path)
 
+    headers = {}
+    hf_token = os.getenv("HUGGINGFACE_HUB_TOKEN")
+    if hf_token:
+        headers["Authorization"] = f"Bearer {hf_token}"
+
     try:
-        with requests.get(url, stream=True, timeout=(10, 180)) as r:
+        with requests.get(url, headers=headers, stream=True, timeout=(10, 180)) as r:
             r.raise_for_status()
             with open(tmp_path, "wb") as f:
                 shutil.copyfileobj(r.raw, f)

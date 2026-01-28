@@ -15,8 +15,8 @@ router = APIRouter()
 logger = logging.getLogger("dental_assistant.transcribe")
 
 # MVP: keep it simple
-ALLOWED_EXTENSIONS = {".wav", ".mp3", ".m4a", ".ogg"}
-MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10MB (aligns with middleware)
+ALLOWED_EXTENSIONS = {".wav", ".mp3", ".m4a", ".ogg", ".webm", ".mp4"}
+MAX_UPLOAD_BYTES = 100 * 1024 * 1024  # 100MB (aligns with middleware)
 
 
 # Lazily create singleton so importing this module doesn't load heavy models

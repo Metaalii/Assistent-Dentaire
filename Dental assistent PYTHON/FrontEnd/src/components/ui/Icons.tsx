@@ -421,6 +421,53 @@ export const HeartPulseIcon: React.FC<IconProps> = ({ className = "", size = 24 
   </svg>
 );
 
+export const StopIcon: React.FC<IconProps> = ({ className = "", size = 24 }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    className={className}
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" />
+  </svg>
+);
+
+export const PlayIcon: React.FC<IconProps> = ({ className = "", size = 24 }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    className={className}
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path
+      d="M5 3L19 12L5 21V3Z"
+      fill="currentColor"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+
+export const PauseIcon: React.FC<IconProps> = ({ className = "", size = 24 }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    className={className}
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor" />
+    <rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor" />
+  </svg>
+);
+
 export const FileAudioIcon: React.FC<IconProps> = ({ className = "", size = 24 }) => (
   <svg
     width={size}
