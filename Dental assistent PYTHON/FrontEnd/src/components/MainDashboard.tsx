@@ -45,11 +45,11 @@ const Header: React.FC<{ onClear: () => void; hasContent: boolean }> = React.mem
         {/* Logo and title */}
         <div className="flex items-center gap-4">
           <div className="relative">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#35a7d3] to-[#00bdb8] shadow-lg shadow-[#35a7d3]/30 flex items-center justify-center">
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#2d96c6] to-[#28b5ad] shadow-lg shadow-[#2d96c6]/30 flex items-center justify-center">
               <ToothIcon className="text-white" size={24} />
             </div>
             <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-white shadow-md flex items-center justify-center">
-              <HeartPulseIcon className="text-[#00bdb8]" size={12} />
+              <HeartPulseIcon className="text-[#28b5ad]" size={12} />
             </div>
           </div>
           <div>
@@ -109,17 +109,17 @@ const UploadZone: React.FC<UploadZoneProps> = React.memo(({
   <Card
     className={`
       relative overflow-hidden transition-all duration-300
-      ${isDragActive ? "ring-4 ring-[#35a7d3]/30 border-[#35a7d3]" : ""}
+      ${isDragActive ? "ring-4 ring-[#2d96c6]/30 border-[#2d96c6]" : ""}
       ${isLoading ? "opacity-50 pointer-events-none" : ""}
     `}
     hover={!isLoading}
   >
     {/* Gradient background pattern */}
-    <div className="absolute inset-0 bg-gradient-to-br from-[#e6f4f9]/50 via-white to-[#e0f7f6]/50 pointer-events-none" />
+    <div className="absolute inset-0 bg-gradient-to-br from-[#f0f7fc]/50 via-white to-[#effcfb]/50 pointer-events-none" />
 
     {/* Decorative circles */}
-    <div className="absolute -top-20 -right-20 w-40 h-40 bg-gradient-to-br from-[#35a7d3]/10 to-transparent rounded-full blur-2xl pointer-events-none" />
-    <div className="absolute -bottom-20 -left-20 w-40 h-40 bg-gradient-to-tr from-[#00bdb8]/10 to-transparent rounded-full blur-2xl pointer-events-none" />
+    <div className="absolute -top-20 -right-20 w-40 h-40 bg-gradient-to-br from-[#2d96c6]/10 to-transparent rounded-full blur-2xl pointer-events-none" />
+    <div className="absolute -bottom-20 -left-20 w-40 h-40 bg-gradient-to-tr from-[#28b5ad]/10 to-transparent rounded-full blur-2xl pointer-events-none" />
 
     <CardBody className="relative">
       <div
@@ -141,13 +141,13 @@ const UploadZone: React.FC<UploadZoneProps> = React.memo(({
             transition-all duration-300
             ${
               isDragActive
-                ? "bg-gradient-to-br from-[#35a7d3] to-[#00bdb8] scale-110"
-                : "bg-gradient-to-br from-[#e6f4f9] to-[#e0f7f6]"
+                ? "bg-gradient-to-br from-[#2d96c6] to-[#28b5ad] scale-110"
+                : "bg-gradient-to-br from-[#f0f7fc] to-[#effcfb]"
             }
           `}
         >
           <UploadCloudIcon
-            className={isDragActive ? "text-white" : "text-[#35a7d3]"}
+            className={isDragActive ? "text-white" : "text-[#2d96c6]"}
             size={40}
           />
         </div>
@@ -233,7 +233,7 @@ const WaveformVisualizer: React.FC = React.memo(() => {
       {barHeights.map((height, i) => (
         <div
           key={i}
-          className="w-1 bg-[#35a7d3] rounded-full animate-pulse"
+          className="w-1 bg-[#2d96c6] rounded-full animate-pulse"
           style={{
             height: `${height}px`,
             animationDelay: `${i * 0.1}s`,
@@ -394,11 +394,11 @@ const LiveRecorder: React.FC<LiveRecorderProps> = ({ onRecordingComplete, isProc
       hover={!isProcessing}
     >
       {/* Gradient background */}
-      <div className="absolute inset-0 bg-gradient-to-br from-[#e6f4f9]/50 via-white to-[#e0f7f6]/50 pointer-events-none" />
+      <div className="absolute inset-0 bg-gradient-to-br from-[#f0f7fc]/50 via-white to-[#effcfb]/50 pointer-events-none" />
 
       {/* Decorative circles */}
-      <div className="absolute -top-20 -left-20 w-40 h-40 bg-gradient-to-br from-[#35a7d3]/10 to-transparent rounded-full blur-2xl pointer-events-none" />
-      <div className="absolute -bottom-20 -right-20 w-40 h-40 bg-gradient-to-tr from-[#00bdb8]/10 to-transparent rounded-full blur-2xl pointer-events-none" />
+      <div className="absolute -top-20 -left-20 w-40 h-40 bg-gradient-to-br from-[#2d96c6]/10 to-transparent rounded-full blur-2xl pointer-events-none" />
+      <div className="absolute -bottom-20 -right-20 w-40 h-40 bg-gradient-to-tr from-[#28b5ad]/10 to-transparent rounded-full blur-2xl pointer-events-none" />
 
       <CardBody className="relative">
         <div className="flex flex-col items-center justify-center py-8">
@@ -413,7 +413,7 @@ const LiveRecorder: React.FC<LiveRecorderProps> = ({ onRecordingComplete, isProc
                   : "bg-gradient-to-br from-[#ef4444] to-[#dc2626] animate-pulse"
                 : audioUrl
                   ? "bg-gradient-to-br from-[#10b981] to-[#059669]"
-                  : "bg-gradient-to-br from-[#35a7d3] to-[#00bdb8]"
+                  : "bg-gradient-to-br from-[#2d96c6] to-[#28b5ad]"
               }
             `}
           >
@@ -569,10 +569,10 @@ const ProcessingIndicator: React.FC = React.memo(() => (
         {/* Processing steps */}
         <div className="mt-8 flex items-center gap-8">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#35a7d3] to-[#2584ae] flex items-center justify-center">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#2d96c6] to-[#1e7aa8] flex items-center justify-center">
               <WaveformIcon className="text-white" size={16} />
             </div>
-            <span className="text-sm font-medium text-[#35a7d3]">Transcribing</span>
+            <span className="text-sm font-medium text-[#2d96c6]">Transcribing</span>
           </div>
           <div className="w-8 h-0.5 bg-[#e2e8f0] rounded" />
           <div className="flex items-center gap-2 opacity-50">
@@ -794,7 +794,7 @@ ${getDocumentFooter()}`;
   const hasContent = !!(transcript || document || error || isStreaming);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#f8fafc] via-[#e6f4f9] to-[#f8fafc]">
+    <div className="min-h-screen bg-gradient-to-br from-[#f8fafc] via-[#f0f7fc] to-[#f8fafc]">
       {/* Header */}
       <Header onClear={clearAll} hasContent={hasContent} />
 
@@ -857,7 +857,7 @@ ${getDocumentFooter()}`;
                         {[0, 1, 2].map((i) => (
                           <div
                             key={i}
-                            className="w-2 h-2 bg-[#35a7d3] rounded-full animate-bounce"
+                            className="w-2 h-2 bg-[#2d96c6] rounded-full animate-bounce"
                             style={{ animationDelay: `${i * 0.15}s` }}
                           />
                         ))}
@@ -868,7 +868,7 @@ ${getDocumentFooter()}`;
                     <div className="min-h-[200px] p-4 bg-[#f8fafc] rounded-xl border-2 border-[#e2e8f0]">
                       <pre className="whitespace-pre-wrap text-[#1e293b] font-mono text-sm leading-relaxed">
                         {streamingContent}
-                        <span className="inline-block w-2 h-4 bg-[#35a7d3] animate-pulse ml-1" />
+                        <span className="inline-block w-2 h-4 bg-[#2d96c6] animate-pulse ml-1" />
                       </pre>
                     </div>
                   </CardBody>
@@ -890,7 +890,7 @@ ${getDocumentFooter()}`;
                     <textarea
                       value={document}
                       onChange={(e) => setDocument(e.target.value)}
-                      className="w-full h-96 p-4 border-2 border-[#e2e8f0] rounded-xl bg-white text-[#1e293b] font-mono text-sm leading-relaxed resize-y focus:border-[#35a7d3] focus:ring-2 focus:ring-[#35a7d3]/20 outline-none"
+                      className="w-full h-96 p-4 border-2 border-[#e2e8f0] rounded-xl bg-white text-[#1e293b] font-mono text-sm leading-relaxed resize-y focus:border-[#2d96c6] focus:ring-2 focus:ring-[#2d96c6]/20 outline-none"
                       placeholder="Document généré..."
                     />
                   </CardBody>

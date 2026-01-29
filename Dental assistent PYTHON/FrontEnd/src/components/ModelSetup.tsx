@@ -45,7 +45,7 @@ const StepIndicator: React.FC<StepIndicatorProps> = ({ currentStep, steps }) => 
                 index < currentStep
                   ? "bg-gradient-to-br from-[#10b981] to-[#059669] text-white shadow-lg shadow-green-500/30"
                   : index === currentStep
-                  ? "bg-gradient-to-br from-[#35a7d3] to-[#00bdb8] text-white shadow-lg shadow-[#35a7d3]/30"
+                  ? "bg-gradient-to-br from-[#2d96c6] to-[#28b5ad] text-white shadow-lg shadow-[#2d96c6]/30"
                   : "bg-[#e2e8f0] text-[#94a3b8]"
               }
             `}
@@ -104,9 +104,9 @@ const HardwareInfoCard: React.FC<HardwareInfoCardProps> = ({ hardware }) => {
   };
 
   return (
-    <div className="bg-gradient-to-br from-[#f8fafc] to-[#e6f4f9] rounded-2xl p-5 border border-[#e2e8f0]">
+    <div className="bg-gradient-to-br from-[#f8fafc] to-[#f0f7fc] rounded-2xl p-5 border border-[#e2e8f0]">
       <div className="flex items-start gap-4">
-        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#35a7d3] to-[#00bdb8] shadow-lg shadow-[#35a7d3]/20 flex items-center justify-center flex-shrink-0">
+        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#2d96c6] to-[#28b5ad] shadow-lg shadow-[#2d96c6]/20 flex items-center justify-center flex-shrink-0">
           <CpuIcon className="text-white" size={24} />
         </div>
         <div className="flex-1 min-w-0">
@@ -284,7 +284,7 @@ export default function ModelSetup({ onReady }: Props) {
   // ============================================
   const renderDownloading = () => (
     <Card className="overflow-hidden">
-      <div className="bg-gradient-to-r from-[#35a7d3] to-[#00bdb8] px-6 py-4">
+      <div className="bg-gradient-to-r from-[#2d96c6] to-[#28b5ad] px-6 py-4">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur flex items-center justify-center">
             <DownloadIcon className="text-white animate-bounce" size={20} />
@@ -302,7 +302,7 @@ export default function ModelSetup({ onReady }: Props) {
             <span className="text-sm font-medium text-[#334155]">
               {t("downloading")}
             </span>
-            <span className="text-sm font-bold text-[#35a7d3]">{progress}%</span>
+            <span className="text-sm font-bold text-[#2d96c6]">{progress}%</span>
           </div>
           <ProgressBar value={progress} size="lg" />
         </div>
@@ -320,13 +320,13 @@ export default function ModelSetup({ onReady }: Props) {
         {/* Download stats */}
         <div className="grid grid-cols-2 gap-4">
           <div className="bg-[#f8fafc] rounded-xl p-4 text-center">
-            <p className="text-2xl font-bold text-[#35a7d3]">
+            <p className="text-2xl font-bold text-[#2d96c6]">
               {hardware?.recommended_model?.includes("7B") ? "~4GB" : "~2GB"}
             </p>
             <p className="text-xs text-[#94a3b8] mt-1">{t("downloadSize")}</p>
           </div>
           <div className="bg-[#f8fafc] rounded-xl p-4 text-center">
-            <p className="text-2xl font-bold text-[#00bdb8]">100%</p>
+            <p className="text-2xl font-bold text-[#28b5ad]">100%</p>
             <p className="text-xs text-[#94a3b8] mt-1">{t("optimal")}</p>
           </div>
         </div>
@@ -339,7 +339,7 @@ export default function ModelSetup({ onReady }: Props) {
   // ============================================
   const renderConfirm = () => (
     <Card className="overflow-hidden">
-      <div className="bg-gradient-to-r from-[#35a7d3] to-[#00bdb8] px-6 py-4">
+      <div className="bg-gradient-to-r from-[#2d96c6] to-[#28b5ad] px-6 py-4">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur flex items-center justify-center">
             <SettingsIcon className="text-white" size={20} />
@@ -362,17 +362,17 @@ export default function ModelSetup({ onReady }: Props) {
             </div>
             <p className="text-sm font-semibold text-[#166534]">100% Private</p>
           </div>
-          <div className="bg-[#e6f4f9] rounded-xl p-4 text-center border border-[#c0e4f1]">
-            <div className="w-10 h-10 mx-auto rounded-xl bg-gradient-to-br from-[#35a7d3] to-[#2584ae] flex items-center justify-center mb-3">
+          <div className="bg-[#f0f7fc] rounded-xl p-4 text-center border border-[#bde0f3]">
+            <div className="w-10 h-10 mx-auto rounded-xl bg-gradient-to-br from-[#2d96c6] to-[#1e7aa8] flex items-center justify-center mb-3">
               <CpuIcon className="text-white" size={20} />
             </div>
-            <p className="text-sm font-semibold text-[#0d5072]">Offline Ready</p>
+            <p className="text-sm font-semibold text-[#1a5271]">Offline Ready</p>
           </div>
-          <div className="bg-[#e0f7f6] rounded-xl p-4 text-center border border-[#b3ebe8]">
-            <div className="w-10 h-10 mx-auto rounded-xl bg-gradient-to-br from-[#00bdb8] to-[#009a94] flex items-center justify-center mb-3">
+          <div className="bg-[#effcfb] rounded-xl p-4 text-center border border-[#b3f0ec]">
+            <div className="w-10 h-10 mx-auto rounded-xl bg-gradient-to-br from-[#28b5ad] to-[#1f9290] flex items-center justify-center mb-3">
               <ToothIcon className="text-white" size={20} />
             </div>
-            <p className="text-sm font-semibold text-[#006860]">Medical Grade</p>
+            <p className="text-sm font-semibold text-[#1d4d4c]">Medical Grade</p>
           </div>
         </div>
 
@@ -402,18 +402,18 @@ export default function ModelSetup({ onReady }: Props) {
   // MAIN RENDER
   // ============================================
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#f8fafc] via-[#e6f4f9] to-[#e0f7f6] p-4 relative overflow-hidden">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#f8fafc] via-[#f0f7fc] to-[#effcfb] p-4 relative overflow-hidden">
       {/* Background decorations */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-gradient-to-br from-[#35a7d3]/10 to-[#00bdb8]/10 rounded-full blur-3xl" />
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-gradient-to-tr from-[#00bdb8]/10 to-[#35a7d3]/10 rounded-full blur-3xl" />
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-gradient-to-br from-[#2d96c6]/10 to-[#28b5ad]/10 rounded-full blur-3xl" />
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-gradient-to-tr from-[#28b5ad]/10 to-[#2d96c6]/10 rounded-full blur-3xl" />
       </div>
 
       {/* Main content */}
       <div className="relative z-10 w-full max-w-xl">
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-[#35a7d3] to-[#00bdb8] shadow-xl shadow-[#35a7d3]/30 mb-4">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-[#2d96c6] to-[#28b5ad] shadow-xl shadow-[#2d96c6]/30 mb-4">
             <ToothIcon className="text-white" size={32} />
           </div>
           <h1 className="text-3xl font-bold text-[#1e293b]">

@@ -30,23 +30,23 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ onComplete }) => {
   const isValid = formData.name.trim() !== "";
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#f8fafc] via-[#e6f4f9] to-[#e0f7f6] relative overflow-hidden">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#f8fafc] via-[#f0f7fc] to-[#effcfb] relative overflow-hidden">
       {/* Animated background elements */}
       <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-gradient-to-br from-[#35a7d3]/20 to-[#00bdb8]/20 rounded-full blur-3xl animate-pulse" />
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-gradient-to-tr from-[#00bdb8]/20 to-[#35a7d3]/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: "1s" }} />
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-gradient-to-br from-[#2d96c6]/20 to-[#28b5ad]/20 rounded-full blur-3xl animate-pulse" />
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-gradient-to-tr from-[#28b5ad]/20 to-[#2d96c6]/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: "1s" }} />
       </div>
 
       {/* Main content */}
       <div className="relative z-10 flex flex-col items-center gap-8 p-8 max-w-lg w-full mx-4">
         {/* Logo */}
         <div className="relative">
-          <div className="absolute inset-0 w-24 h-24 rounded-full bg-gradient-to-r from-[#35a7d3] to-[#00bdb8] blur-xl opacity-30 animate-pulse" />
-          <div className="relative w-24 h-24 rounded-2xl bg-gradient-to-br from-[#35a7d3] to-[#00bdb8] shadow-2xl shadow-[#35a7d3]/30 flex items-center justify-center">
+          <div className="absolute inset-0 w-24 h-24 rounded-full bg-gradient-to-r from-[#2d96c6] to-[#28b5ad] blur-xl opacity-30 animate-pulse" />
+          <div className="relative w-24 h-24 rounded-2xl bg-gradient-to-br from-[#2d96c6] to-[#28b5ad] shadow-2xl shadow-[#2d96c6]/30 flex items-center justify-center">
             <ToothIcon className="text-white" size={48} />
           </div>
           <div className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-white shadow-lg flex items-center justify-center">
-            <HeartPulseIcon className="text-[#00bdb8] animate-pulse" size={16} />
+            <HeartPulseIcon className="text-[#28b5ad] animate-pulse" size={16} />
           </div>
         </div>
 
@@ -72,7 +72,7 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ onComplete }) => {
               value={formData.name}
               onChange={(e) => handleChange("name", e.target.value)}
               placeholder="Dr Rudy PEREZ"
-              className="w-full px-4 py-3 rounded-xl border-2 border-[#e2e8f0] bg-white/80 text-[#1e293b] placeholder-[#94a3b8] focus:border-[#35a7d3] focus:ring-2 focus:ring-[#35a7d3]/20 outline-none transition-all"
+              className="w-full px-4 py-3 rounded-xl border-2 border-[#e2e8f0] bg-white/80 text-[#1e293b] placeholder-[#94a3b8] focus:border-[#2d96c6] focus:ring-2 focus:ring-[#2d96c6]/20 outline-none transition-all"
               required
             />
           </div>
@@ -87,7 +87,7 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ onComplete }) => {
               value={formData.title}
               onChange={(e) => handleChange("title", e.target.value)}
               placeholder="Chirurgien-dentiste"
-              className="w-full px-4 py-3 rounded-xl border-2 border-[#e2e8f0] bg-white/80 text-[#1e293b] placeholder-[#94a3b8] focus:border-[#35a7d3] focus:ring-2 focus:ring-[#35a7d3]/20 outline-none transition-all"
+              className="w-full px-4 py-3 rounded-xl border-2 border-[#e2e8f0] bg-white/80 text-[#1e293b] placeholder-[#94a3b8] focus:border-[#2d96c6] focus:ring-2 focus:ring-[#2d96c6]/20 outline-none transition-all"
             />
           </div>
 
@@ -101,7 +101,7 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ onComplete }) => {
               value={formData.address}
               onChange={(e) => handleChange("address", e.target.value)}
               placeholder="8, rue Andrioli – 06000 NICE"
-              className="w-full px-4 py-3 rounded-xl border-2 border-[#e2e8f0] bg-white/80 text-[#1e293b] placeholder-[#94a3b8] focus:border-[#35a7d3] focus:ring-2 focus:ring-[#35a7d3]/20 outline-none transition-all"
+              className="w-full px-4 py-3 rounded-xl border-2 border-[#e2e8f0] bg-white/80 text-[#1e293b] placeholder-[#94a3b8] focus:border-[#2d96c6] focus:ring-2 focus:ring-[#2d96c6]/20 outline-none transition-all"
             />
           </div>
 
@@ -115,7 +115,7 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ onComplete }) => {
               value={formData.phone}
               onChange={(e) => handleChange("phone", e.target.value)}
               placeholder="04 93 44 78 06"
-              className="w-full px-4 py-3 rounded-xl border-2 border-[#e2e8f0] bg-white/80 text-[#1e293b] placeholder-[#94a3b8] focus:border-[#35a7d3] focus:ring-2 focus:ring-[#35a7d3]/20 outline-none transition-all"
+              className="w-full px-4 py-3 rounded-xl border-2 border-[#e2e8f0] bg-white/80 text-[#1e293b] placeholder-[#94a3b8] focus:border-[#2d96c6] focus:ring-2 focus:ring-[#2d96c6]/20 outline-none transition-all"
             />
           </div>
 
@@ -129,7 +129,7 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ onComplete }) => {
               value={formData.email}
               onChange={(e) => handleChange("email", e.target.value)}
               placeholder="dr.perez.rudy@gmail.com"
-              className="w-full px-4 py-3 rounded-xl border-2 border-[#e2e8f0] bg-white/80 text-[#1e293b] placeholder-[#94a3b8] focus:border-[#35a7d3] focus:ring-2 focus:ring-[#35a7d3]/20 outline-none transition-all"
+              className="w-full px-4 py-3 rounded-xl border-2 border-[#e2e8f0] bg-white/80 text-[#1e293b] placeholder-[#94a3b8] focus:border-[#2d96c6] focus:ring-2 focus:ring-[#2d96c6]/20 outline-none transition-all"
             />
           </div>
 

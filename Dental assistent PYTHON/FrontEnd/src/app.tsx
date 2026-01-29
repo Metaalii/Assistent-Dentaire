@@ -42,12 +42,12 @@ const SplashScreen: React.FC = () => {
   const { t } = useLanguage();
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#f8fafc] via-[#e6f4f9] to-[#e0f7f6] relative overflow-hidden">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#f8fafc] via-[#f0f7fc] to-[#effcfb] relative overflow-hidden">
       {/* Animated background elements */}
       <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-gradient-to-br from-[#35a7d3]/20 to-[#00bdb8]/20 rounded-full blur-3xl animate-pulse" />
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-gradient-to-tr from-[#00bdb8]/20 to-[#35a7d3]/20 rounded-full blur-3xl animate-pulse delay-1000" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-r from-[#35a7d3]/5 to-[#00bdb8]/5 rounded-full blur-3xl" />
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-gradient-to-br from-[#2d96c6]/20 to-[#28b5ad]/20 rounded-full blur-3xl animate-pulse" />
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-gradient-to-tr from-[#28b5ad]/20 to-[#2d96c6]/20 rounded-full blur-3xl animate-pulse delay-1000" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-r from-[#2d96c6]/5 to-[#28b5ad]/5 rounded-full blur-3xl" />
       </div>
 
       {/* Main content */}
@@ -55,16 +55,16 @@ const SplashScreen: React.FC = () => {
         {/* Logo container */}
         <div className="relative">
           {/* Glowing ring */}
-          <div className="absolute inset-0 w-32 h-32 rounded-full bg-gradient-to-r from-[#35a7d3] to-[#00bdb8] blur-xl opacity-30 animate-pulse" />
+          <div className="absolute inset-0 w-32 h-32 rounded-full bg-gradient-to-r from-[#2d96c6] to-[#28b5ad] blur-xl opacity-30 animate-pulse" />
 
           {/* Logo background */}
-          <div className="relative w-32 h-32 rounded-3xl bg-gradient-to-br from-[#35a7d3] to-[#00bdb8] shadow-2xl shadow-[#35a7d3]/30 flex items-center justify-center transform hover:scale-105 transition-transform duration-300">
+          <div className="relative w-32 h-32 rounded-3xl bg-gradient-to-br from-[#2d96c6] to-[#28b5ad] shadow-2xl shadow-[#2d96c6]/30 flex items-center justify-center transform hover:scale-105 transition-transform duration-300">
             <ToothIcon className="text-white" size={64} />
           </div>
 
           {/* Heartbeat indicator */}
           <div className="absolute -bottom-2 -right-2 w-10 h-10 rounded-full bg-white shadow-lg flex items-center justify-center">
-            <HeartPulseIcon className="text-[#00bdb8] animate-pulse" size={20} />
+            <HeartPulseIcon className="text-[#28b5ad] animate-pulse" size={20} />
           </div>
         </div>
 
@@ -246,7 +246,7 @@ function AppContent() {
 
   return (
     <ErrorBoundary>
-      <div className="min-h-screen bg-gradient-to-br from-[#f8fafc] via-[#e6f4f9] to-[#f8fafc]">
+      <div className="min-h-screen bg-gradient-to-br from-[#f8fafc] via-[#f0f7fc] to-[#f8fafc]">
         <MainDashboard />
       </div>
     </ErrorBoundary>
