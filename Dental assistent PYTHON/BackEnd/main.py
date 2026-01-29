@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import shutil
@@ -9,11 +10,13 @@ from dotenv import load_dotenv
 load_dotenv()
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from app.config import MODEL_CONFIGS, get_llm_model_path, analyze_hardware, get_hardware_info
 from app.middleware import MaxRequestSizeMiddleware, SimpleRateLimitMiddleware
 from app.security import verify_api_key, check_api_key_configured
+from app.llm_config import SMARTNOTE_PROMPT_OPTIMIZED
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("dental_assistant")
@@ -68,27 +71,12 @@ class SummaryRequest(BaseModel):
     text: str
 
 
-SMARTNOTE_PROMPT = """Tu es un assistant dentaire professionnel français. À partir de la transcription suivante d'une consultation dentaire, génère une SmartNote concise de 5 à 10 lignes.
-
-Format de la SmartNote:
-Patient envoyé par Dr… (cabinet…)
-Motif : [motif de consultation]
-• Antécédents : [antécédents médicaux et dentaires pertinents]
-• Examen : [observations cliniques principales]
-• Plan de traitement : [traitements proposés]
-• Risques : [risques identifiés]
-• Recommandations : [conseils au patient]
-• Prochaine étape : [prochains rendez-vous ou actions]
-• Administratif : [informations sur devis, paiement, etc.]
-
-Transcription de la consultation:
-{text}
-
-Génère uniquement la SmartNote en français, sans commentaires supplémentaires."""
-
-
 @app.post("/summarize", dependencies=[Depends(verify_api_key)])
 async def summarize(req: SummaryRequest):
+    """
+    Generate a SmartNote summary from transcribed text.
+    Returns the complete summary when generation is finished.
+    """
     if not get_llm_model_path().exists():
         raise HTTPException(status_code=503, detail="Model not downloaded. Please run setup.")
 
@@ -96,9 +84,47 @@ async def summarize(req: SummaryRequest):
     from app.llm.local_llm import LocalLLM  # noqa: WPS433
 
     llm = LocalLLM()
-    prompt = SMARTNOTE_PROMPT.format(text=req.text)
+    prompt = SMARTNOTE_PROMPT_OPTIMIZED.format(text=req.text)
     summary = await llm.generate(prompt)
     return {"summary": summary}
+
+
+@app.post("/summarize-stream", dependencies=[Depends(verify_api_key)])
+async def summarize_stream(req: SummaryRequest):
+    """
+    Stream SmartNote generation using Server-Sent Events (SSE).
+    Returns tokens as they are generated for reduced perceived latency.
+
+    Event format:
+    - data: {"chunk": "token text"}  - for each generated token
+    - data: [DONE]                    - when generation is complete
+    """
+    if not get_llm_model_path().exists():
+        raise HTTPException(status_code=503, detail="Model not downloaded. Please run setup.")
+
+    from app.llm.local_llm import LocalLLM  # noqa: WPS433
+
+    llm = LocalLLM()
+    prompt = SMARTNOTE_PROMPT_OPTIMIZED.format(text=req.text)
+
+    async def event_generator():
+        try:
+            async for chunk in llm.generate_stream(prompt):
+                yield f"data: {json.dumps({'chunk': chunk})}\n\n"
+            yield "data: [DONE]\n\n"
+        except Exception as e:
+            logger.exception("Streaming error")
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # Disable nginx buffering
+        }
+    )
 
 
 # --- Setup / download ---

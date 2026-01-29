@@ -2,11 +2,26 @@ import asyncio
 import logging
 import threading
 from pathlib import Path
-from typing import Optional
+from typing import Optional, AsyncIterator
 
 from fastapi import HTTPException
 
 from app.config import get_llm_model_path, get_hardware_info
+from app.llm_config import (
+    CONTEXT_LENGTH,
+    CPU_THREADS,
+    BATCH_SIZES,
+    GPU_LAYERS,
+    GPU_LAYERS_APPLE_SILICON,
+    GENERATION_PARAMS,
+    STOP_TOKENS,
+    MAX_GENERATION_TOKENS,
+    MEMORY_CONFIG,
+    CHUNKING_THRESHOLD,
+    CHUNK_SIZE_TOKENS,
+    CHUNK_SUMMARY_PROMPT,
+    COMBINE_SUMMARIES_PROMPT,
+)
 
 logger = logging.getLogger("dental_assistant.local_llm")
 
@@ -21,6 +36,8 @@ class LocalLLM:
     - Automatic GPU layer offloading based on detected hardware
     - Single in-flight inference at a time
     - Thread-safe initialization
+    - Streaming support for reduced perceived latency
+    - Optimized memory configuration
     """
 
     _instance: Optional["LocalLLM"] = None
@@ -34,6 +51,7 @@ class LocalLLM:
                     cls._instance._llm = None
                     cls._instance._load_lock = threading.Lock()
                     cls._instance._inference_semaphore = asyncio.Semaphore(1)
+                    cls._instance._hw_profile = None
         return cls._instance
 
     def _ensure_model_file(self) -> Path:
@@ -44,6 +62,35 @@ class LocalLLM:
                 detail=f"LLM model not found at {model_path}. Run setup/download first.",
             )
         return model_path
+
+    def _get_optimized_config(self, hw_info: dict) -> dict:
+        """
+        Determine optimized llama.cpp configuration based on hardware.
+        """
+        profile = hw_info["profile"]
+        is_apple_silicon = hw_info.get("detection_method") == "apple_silicon"
+
+        # GPU layers configuration
+        if hw_info["gpu_detected"] and hw_info["backend_gpu_support"]:
+            if is_apple_silicon:
+                gpu_layers = GPU_LAYERS_APPLE_SILICON
+            else:
+                gpu_layers = GPU_LAYERS.get(profile, 0)
+        else:
+            gpu_layers = 0
+
+        # Batch size based on profile
+        n_batch = BATCH_SIZES.get(profile, 256)
+
+        return {
+            "n_ctx": CONTEXT_LENGTH,
+            "n_threads": CPU_THREADS,
+            "n_gpu_layers": gpu_layers,
+            "n_batch": n_batch,
+            "use_mlock": MEMORY_CONFIG["use_mlock"],
+            "use_mmap": MEMORY_CONFIG["use_mmap"],
+            "verbose": False,
+        }
 
     def _load_model_if_needed(self) -> None:
         if self._llm is not None:
@@ -64,41 +111,35 @@ class LocalLLM:
                     detail="LLM dependency not installed (llama-cpp-python). Install it to enable summarization.",
                 ) from e
 
-            # Detect hardware and configure GPU acceleration
+            # Detect hardware and get optimized configuration
             hw_info = get_hardware_info()
-            profile = hw_info["profile"]
+            self._hw_profile = hw_info["profile"]
+            config = self._get_optimized_config(hw_info)
 
-            # Determine optimal GPU layer offloading based on hardware
-            gpu_layers = 0
-            if hw_info["gpu_detected"] and hw_info["backend_gpu_support"]:
-                if profile == "high_vram":
-                    gpu_layers = 35  # Offload most layers to GPU (8GB+ VRAM)
-                elif profile == "low_vram":
-                    gpu_layers = 20  # Offload some layers to GPU (4-8GB VRAM)
-                # cpu_only profile stays at 0 layers
-
+            if config["n_gpu_layers"] > 0:
                 logger.info(
-                    "Loading LLM model from %s with GPU acceleration (%s: %d layers)...",
-                    model_path,
+                    "Loading LLM with GPU acceleration: %s (%d layers, batch=%d, ctx=%d, threads=%d)",
                     hw_info.get("gpu_name", "GPU"),
-                    gpu_layers
+                    config["n_gpu_layers"],
+                    config["n_batch"],
+                    config["n_ctx"],
+                    config["n_threads"],
                 )
             else:
-                logger.info("Loading LLM model from %s in CPU mode...", model_path)
+                logger.info(
+                    "Loading LLM in CPU mode (batch=%d, ctx=%d, threads=%d)",
+                    config["n_batch"],
+                    config["n_ctx"],
+                    config["n_threads"],
+                )
 
-            self._llm = Llama(
-                model_path=str(model_path),
-                n_ctx=8192,  # Increased for longer transcriptions
-                n_threads=None,  # let llama.cpp decide
-                n_gpu_layers=gpu_layers,
-                verbose=False,
-            )
+            self._llm = Llama(model_path=str(model_path), **config)
 
     def _estimate_tokens(self, text: str) -> int:
         """Rough token estimation: ~3 characters per token for French/multilingual text."""
         return len(text) // 3
 
-    def _chunk_text(self, text: str, max_chunk_tokens: int = 2500) -> list[str]:
+    def _chunk_text(self, text: str, max_chunk_tokens: int = CHUNK_SIZE_TOKENS) -> list[str]:
         """Split text into chunks that fit within token limits."""
         max_chars = max_chunk_tokens * 3  # Approximate chars per chunk (conservative for French)
 
@@ -137,20 +178,69 @@ class LocalLLM:
             # Check if text is too long and needs chunking
             estimated_tokens = self._estimate_tokens(prompt)
 
-            if estimated_tokens > 6000:  # Leave room for response tokens
+            if estimated_tokens > CHUNKING_THRESHOLD:
                 logger.info("Long text detected (%d estimated tokens), using chunked summarization", estimated_tokens)
                 return await asyncio.to_thread(self._generate_chunked_sync, prompt)
             else:
                 return await asyncio.to_thread(self._generate_sync, prompt)
+
+    async def generate_stream(self, prompt: str) -> AsyncIterator[str]:
+        """
+        Stream tokens as they are generated for reduced perceived latency.
+        Yields chunks of text as they become available.
+        """
+        self._load_model_if_needed()
+
+        async with self._inference_semaphore:
+            # Run streaming in thread pool to not block event loop
+            queue: asyncio.Queue[str | None] = asyncio.Queue()
+
+            def stream_worker():
+                try:
+                    for token in self._llm(
+                        prompt,
+                        max_tokens=MAX_GENERATION_TOKENS,
+                        stop=STOP_TOKENS,
+                        stream=True,
+                        **GENERATION_PARAMS,
+                    ):
+                        chunk = token["choices"][0]["text"]
+                        asyncio.get_event_loop().call_soon_threadsafe(
+                            queue.put_nowait, chunk
+                        )
+                except Exception as e:
+                    logger.exception("Streaming generation error")
+                    asyncio.get_event_loop().call_soon_threadsafe(
+                        queue.put_nowait, None
+                    )
+                    raise
+                finally:
+                    asyncio.get_event_loop().call_soon_threadsafe(
+                        queue.put_nowait, None
+                    )
+
+            # Start streaming in background thread
+            loop = asyncio.get_event_loop()
+            thread = threading.Thread(target=stream_worker, daemon=True)
+            thread.start()
+
+            # Yield tokens as they arrive
+            while True:
+                chunk = await queue.get()
+                if chunk is None:
+                    break
+                yield chunk
 
     def _generate_chunked_sync(self, prompt: str) -> str:
         """Handle long transcriptions by chunking and combining summaries."""
         assert self._llm is not None
 
         # Extract the actual text content from the prompt
-        # Find the transcription text after the prompt header
-        if "Transcription de la consultation:" in prompt:
-            text = prompt.split("Transcription de la consultation:")[-1].strip()
+        if "Consultation:" in prompt:
+            text = prompt.split("Consultation:")[-1].strip()
+            # Remove trailing "SmartNote:" if present
+            if text.endswith("SmartNote:"):
+                text = text[:-10].strip()
         elif ":\n" in prompt:
             _, text = prompt.split(":\n", 1)
         else:
@@ -161,20 +251,25 @@ class LocalLLM:
 
         chunk_summaries = []
         for i, chunk in enumerate(chunks):
-            chunk_prompt = f"Résume cette partie ({i+1}/{len(chunks)}) d'une consultation dentaire en français:\n{chunk}"
+            chunk_prompt = CHUNK_SUMMARY_PROMPT.format(
+                part=i + 1,
+                total=len(chunks),
+                text=chunk
+            )
 
             result = self._llm(
                 chunk_prompt,
-                max_tokens=500,
-                stop=["<|eot_id|>", "<|end_of_text|>"],
+                max_tokens=400,
+                stop=STOP_TOKENS,
+                **GENERATION_PARAMS,
             )
 
             try:
                 summary = result["choices"][0]["text"].strip()
                 chunk_summaries.append(summary)
-                logger.debug("Chunk %d/%d summarized", i+1, len(chunks))
+                logger.debug("Chunk %d/%d summarized", i + 1, len(chunks))
             except Exception:
-                logger.warning("Failed to summarize chunk %d", i+1)
+                logger.warning("Failed to summarize chunk %d", i + 1)
                 continue
 
         # Combine chunk summaries into final SmartNote
@@ -182,24 +277,13 @@ class LocalLLM:
             return chunk_summaries[0]
 
         combined = "\n\n".join(chunk_summaries)
-        final_prompt = f"""Combine ces résumés partiels en une SmartNote dentaire concise (5-10 lignes) en français:
-
-{combined}
-
-Format:
-Motif : ...
-• Antécédents : ...
-• Examen : ...
-• Plan de traitement : ...
-• Risques : ...
-• Recommandations : ...
-• Prochaine étape : ...
-• Administratif : ..."""
+        final_prompt = COMBINE_SUMMARIES_PROMPT.format(summaries=combined)
 
         result = self._llm(
             final_prompt,
-            max_tokens=1000,
-            stop=["<|eot_id|>", "<|end_of_text|>"],
+            max_tokens=MAX_GENERATION_TOKENS,
+            stop=STOP_TOKENS,
+            **GENERATION_PARAMS,
         )
 
         try:
@@ -213,8 +297,9 @@ Motif : ...
 
         result = self._llm(
             prompt,
-            max_tokens=1024,  # Increased for longer French documents
-            stop=["<|eot_id|>", "<|end_of_text|>"],
+            max_tokens=MAX_GENERATION_TOKENS,
+            stop=STOP_TOKENS,
+            **GENERATION_PARAMS,
         )
 
         try:

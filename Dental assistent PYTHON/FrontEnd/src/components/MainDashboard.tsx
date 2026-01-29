@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { summarizeText, transcribeAudio } from "../api";
+import { summarizeTextStream, transcribeAudio } from "../api";
 import { useProfile } from "../hooks/useProfile";
 import {
   Button,
@@ -620,9 +620,11 @@ const ResultCard: React.FC<ResultCardProps> = ({
 export default function MainDashboard() {
   const [fileName, setFileName] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [transcript, setTranscript] = useState<string | null>(null);
   const [document, setDocument] = useState<string | null>(null);
+  const [streamingContent, setStreamingContent] = useState<string>("");
   const [isDragActive, setIsDragActive] = useState(false);
 
   const { getDocumentHeader, getDocumentFooter } = useProfile();
@@ -637,27 +639,52 @@ export default function MainDashboard() {
 
     setFileName(file.name);
     setIsLoading(true);
+    setIsStreaming(false);
     setError(null);
     setTranscript(null);
     setDocument(null);
+    setStreamingContent("");
 
     try {
+      // Step 1: Transcribe audio
       const tr = await transcribeAudio(file);
       setTranscript(tr.text);
 
-      const sum = await summarizeText(tr.text);
-      // Combine header + generated content + footer
-      const fullDocument = `${getDocumentHeader()}
+      // Step 2: Generate summary with streaming for real-time feedback
+      setIsLoading(false);
+      setIsStreaming(true);
 
-${sum.summary}
+      await summarizeTextStream(
+        tr.text,
+        // onChunk: called for each token
+        (chunk) => {
+          setStreamingContent((prev) => prev + chunk);
+        },
+        // onComplete: called when generation is finished
+        (fullText) => {
+          // Combine header + generated content + footer
+          const fullDocument = `${getDocumentHeader()}
+
+${fullText}
 
 ${getDocumentFooter()}`;
-      setDocument(fullDocument);
+          setDocument(fullDocument);
+          setIsStreaming(false);
+          setStreamingContent("");
+        },
+        // onError: called on error
+        (err) => {
+          console.error(err);
+          setError(err.message);
+          setIsStreaming(false);
+          setStreamingContent("");
+        }
+      );
     } catch (e) {
       console.error(e);
       setError(e instanceof Error ? e.message : "An error occurred. Please try again.");
-    } finally {
       setIsLoading(false);
+      setIsStreaming(false);
     }
   };
 
@@ -718,7 +745,7 @@ ${getDocumentFooter()}`;
     setDocument(null);
   };
 
-  const hasContent = !!(transcript || document || error);
+  const hasContent = !!(transcript || document || error || isStreaming);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#f8fafc] via-[#e6f4f9] to-[#f8fafc]">
@@ -770,8 +797,41 @@ ${getDocumentFooter()}`;
               </section>
             )}
 
+            {/* Streaming indicator - shows content as it's generated */}
+            {isStreaming && (
+              <section className="animate-fade-in">
+                <Card className="overflow-hidden">
+                  <CardHeader icon={<SparklesIcon className="text-white" size={20} />}>
+                    <div className="flex items-center gap-3">
+                      <div>
+                        <h2 className="font-semibold text-[#1e293b]">Generating SmartNote</h2>
+                        <p className="text-xs text-[#64748b]">AI is writing...</p>
+                      </div>
+                      <div className="flex gap-1">
+                        {[0, 1, 2].map((i) => (
+                          <div
+                            key={i}
+                            className="w-2 h-2 bg-[#35a7d3] rounded-full animate-bounce"
+                            style={{ animationDelay: `${i * 0.15}s` }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardBody>
+                    <div className="min-h-[200px] p-4 bg-[#f8fafc] rounded-xl border-2 border-[#e2e8f0]">
+                      <pre className="whitespace-pre-wrap text-[#1e293b] font-mono text-sm leading-relaxed">
+                        {streamingContent}
+                        <span className="inline-block w-2 h-4 bg-[#35a7d3] animate-pulse ml-1" />
+                      </pre>
+                    </div>
+                  </CardBody>
+                </Card>
+              </section>
+            )}
+
             {/* Document section */}
-            {document && !isLoading && (
+            {document && !isLoading && !isStreaming && (
               <section className="animate-fade-in-up">
                 <Card className="overflow-hidden">
                   <CardHeader icon={<DocumentIcon className="text-white" size={20} />}>
@@ -821,7 +881,7 @@ ${getDocumentFooter()}`;
             )}
 
             {/* Empty state hint */}
-            {!hasContent && !isLoading && (
+            {!hasContent && !isLoading && !isStreaming && (
               <section className="text-center py-8">
                 <div className="flex justify-center gap-4">
                   <div className="flex items-center gap-2 text-[#94a3b8]">

@@ -71,6 +71,90 @@ export async function summarizeText(text: string): Promise<SummarizeResponse> {
   return res.json();
 }
 
+/**
+ * Stream SmartNote generation using Server-Sent Events (SSE).
+ * Provides real-time feedback as tokens are generated.
+ *
+ * @param text - The transcription text to summarize
+ * @param onChunk - Callback called for each token received
+ * @param onComplete - Callback called when generation is complete
+ * @param onError - Callback called on error
+ */
+export async function summarizeTextStream(
+  text: string,
+  onChunk: (chunk: string) => void,
+  onComplete: (fullText: string) => void,
+  onError?: (error: Error) => void
+): Promise<void> {
+  const headers = await authHeaders({ "Content-Type": "application/json" });
+
+  try {
+    const res = await fetch(`${BASE_URL}/summarize-stream`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ text }),
+    });
+
+    if (!res.ok) {
+      throw new Error(await safeError(res));
+    }
+
+    const reader = res.body?.getReader();
+    if (!reader) {
+      throw new Error("No response body");
+    }
+
+    const decoder = new TextDecoder();
+    let fullText = "";
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+
+      // Process complete SSE messages
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || ""; // Keep incomplete line in buffer
+
+      for (const line of lines) {
+        if (line.startsWith("data: ")) {
+          const data = line.slice(6).trim();
+
+          if (data === "[DONE]") {
+            onComplete(fullText);
+            return;
+          }
+
+          try {
+            const parsed = JSON.parse(data);
+            if (parsed.chunk) {
+              fullText += parsed.chunk;
+              onChunk(parsed.chunk);
+            } else if (parsed.error) {
+              throw new Error(parsed.error);
+            }
+          } catch (parseErr) {
+            // Skip invalid JSON lines
+            console.warn("Failed to parse SSE data:", data);
+          }
+        }
+      }
+    }
+
+    // If we exit the loop without [DONE], still complete
+    onComplete(fullText);
+  } catch (err) {
+    const error = err instanceof Error ? err : new Error(String(err));
+    if (onError) {
+      onError(error);
+    } else {
+      throw error;
+    }
+  }
+}
+
 export async function checkModelStatus(): Promise<HardwareInfo> {
   const res = await fetch(`${BASE_URL}/setup/check-models`);
   if (!res.ok) throw new Error(await safeError(res));
