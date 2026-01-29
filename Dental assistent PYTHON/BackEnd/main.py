@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import shutil
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import requests
@@ -21,7 +22,36 @@ from app.llm_config import SMARTNOTE_PROMPT_OPTIMIZED
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("dental_assistant")
 
-app = FastAPI(title="Dental Assistant Backend")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan handler for startup and shutdown events."""
+    # Startup
+    if not check_api_key_configured():
+        logger.info(
+            "ℹ️  Using default development API key. "
+            "Set APP_API_KEY environment variable for production use."
+        )
+    else:
+        logger.info("✓ API key configured from environment")
+
+    # Log hardware detection results
+    hw_info = get_hardware_info()
+    logger.info(
+        "Hardware detected: %s (GPU: %s, VRAM: %s GB, Backend: %s)",
+        hw_info["profile"],
+        hw_info.get("gpu_name", "None"),
+        hw_info.get("vram_gb", "N/A"),
+        "supported" if hw_info.get("backend_gpu_support") else "not supported"
+    )
+
+    yield  # Application runs here
+
+    # Shutdown (add cleanup here if needed)
+    logger.info("Dental Assistant Backend shutting down")
+
+
+app = FastAPI(title="Dental Assistant Backend", lifespan=lifespan)
 
 # Router import from app/llm/api/transcribe.py
 from app.llm.api.transcribe import router as transcribe_router  # noqa: E402
@@ -40,30 +70,6 @@ app.add_middleware(MaxRequestSizeMiddleware, max_bytes=100 * 1024 * 1024)
 
 # MVP: keep class for compatibility; it is disabled unless ENABLE_DEV_RATE_LIMIT=1
 app.add_middleware(SimpleRateLimitMiddleware)
-
-
-# --- Startup Checks ---
-@app.on_event("startup")
-async def startup_checks():
-    """Run startup validation checks."""
-    # Check API key configuration
-    if not check_api_key_configured():
-        logger.info(
-            "ℹ️  Using default development API key. "
-            "Set APP_API_KEY environment variable for production use."
-        )
-    else:
-        logger.info("✓ API key configured from environment")
-
-    # Log hardware detection results
-    hw_info = get_hardware_info()
-    logger.info(
-        "Hardware detected: %s (GPU: %s, VRAM: %s GB, Backend: %s)",
-        hw_info["profile"],
-        hw_info.get("gpu_name", "None"),
-        hw_info.get("vram_gb", "N/A"),
-        "supported" if hw_info.get("backend_gpu_support") else "not supported"
-    )
 
 
 # --- Business Logic ---

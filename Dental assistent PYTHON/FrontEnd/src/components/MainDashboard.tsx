@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { summarizeTextStream, transcribeAudio } from "../api";
 import { useProfile } from "../hooks/useProfile";
 import {
@@ -33,9 +33,9 @@ function getExt(name: string) {
 }
 
 // ============================================
-// HEADER COMPONENT
+// HEADER COMPONENT (memoized)
 // ============================================
-const Header: React.FC<{ onClear: () => void; hasContent: boolean }> = ({
+const Header: React.FC<{ onClear: () => void; hasContent: boolean }> = React.memo(({
   onClear,
   hasContent,
 }) => (
@@ -78,10 +78,12 @@ const Header: React.FC<{ onClear: () => void; hasContent: boolean }> = ({
       </div>
     </Container>
   </header>
-);
+));
+
+Header.displayName = 'Header';
 
 // ============================================
-// UPLOAD ZONE COMPONENT
+// UPLOAD ZONE COMPONENT (memoized)
 // ============================================
 interface UploadZoneProps {
   onFileSelect: (file: File) => void;
@@ -94,7 +96,7 @@ interface UploadZoneProps {
   inputRef: React.RefObject<HTMLInputElement>;
 }
 
-const UploadZone: React.FC<UploadZoneProps> = ({
+const UploadZone: React.FC<UploadZoneProps> = React.memo(({
   onFileSelect,
   fileName,
   isLoading,
@@ -212,7 +214,38 @@ const UploadZone: React.FC<UploadZoneProps> = ({
       </p>
     </div>
   </Card>
-);
+));
+
+UploadZone.displayName = 'UploadZone';
+
+// ============================================
+// WAVEFORM VISUALIZER COMPONENT (memoized to prevent re-renders)
+// ============================================
+const WaveformVisualizer: React.FC = React.memo(() => {
+  // Generate heights once and memoize them
+  const barHeights = useMemo(
+    () => Array.from({ length: 12 }, () => Math.random() * 24 + 8),
+    []
+  );
+
+  return (
+    <div className="flex items-center justify-center gap-1 mb-6 h-8">
+      {barHeights.map((height, i) => (
+        <div
+          key={i}
+          className="w-1 bg-[#35a7d3] rounded-full animate-pulse"
+          style={{
+            height: `${height}px`,
+            animationDelay: `${i * 0.1}s`,
+            animationDuration: '0.5s'
+          }}
+        />
+      ))}
+    </div>
+  );
+});
+
+WaveformVisualizer.displayName = 'WaveformVisualizer';
 
 // ============================================
 // LIVE RECORDER COMPONENT
@@ -233,16 +266,23 @@ const LiveRecorder: React.FC<LiveRecorderProps> = ({ onRecordingComplete, isProc
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<number | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const audioUrlRef = useRef<string | null>(null);
 
+  // Keep ref in sync with state for cleanup
+  useEffect(() => {
+    audioUrlRef.current = audioUrl;
+  }, [audioUrl]);
+
+  // Cleanup on unmount only (empty deps)
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
       }
-      if (audioUrl) URL.revokeObjectURL(audioUrl);
+      if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
     };
-  }, [audioUrl]);
+  }, []);
 
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -412,19 +452,7 @@ const LiveRecorder: React.FC<LiveRecorderProps> = ({ onRecordingComplete, isProc
 
           {/* Waveform visualization when recording */}
           {isRecording && !isPaused && (
-            <div className="flex items-center justify-center gap-1 mb-6 h-8">
-              {[...Array(12)].map((_, i) => (
-                <div
-                  key={i}
-                  className="w-1 bg-[#35a7d3] rounded-full animate-pulse"
-                  style={{
-                    height: `${Math.random() * 24 + 8}px`,
-                    animationDelay: `${i * 0.1}s`,
-                    animationDuration: '0.5s'
-                  }}
-                />
-              ))}
-            </div>
+            <WaveformVisualizer />
           )}
 
           {/* Error message */}
@@ -523,9 +551,9 @@ const LiveRecorder: React.FC<LiveRecorderProps> = ({ onRecordingComplete, isProc
 };
 
 // ============================================
-// PROCESSING INDICATOR COMPONENT
+// PROCESSING INDICATOR COMPONENT (memoized)
 // ============================================
-const ProcessingIndicator: React.FC = () => (
+const ProcessingIndicator: React.FC = React.memo(() => (
   <Card>
     <CardBody className="py-10">
       <div className="flex flex-col items-center">
@@ -557,10 +585,12 @@ const ProcessingIndicator: React.FC = () => (
       </div>
     </CardBody>
   </Card>
-);
+));
+
+ProcessingIndicator.displayName = 'ProcessingIndicator';
 
 // ============================================
-// RESULT CARD COMPONENT
+// RESULT CARD COMPONENT (memoized)
 // ============================================
 interface ResultCardProps {
   title: string;
@@ -571,7 +601,7 @@ interface ResultCardProps {
   isPending: boolean;
 }
 
-const ResultCard: React.FC<ResultCardProps> = ({
+const ResultCard: React.FC<ResultCardProps> = React.memo(({
   title,
   content,
   icon,
@@ -612,7 +642,9 @@ const ResultCard: React.FC<ResultCardProps> = ({
       )}
     </CardBody>
   </Card>
-);
+));
+
+ResultCard.displayName = 'ResultCard';
 
 // ============================================
 // MAIN DASHBOARD COMPONENT
@@ -630,7 +662,7 @@ export default function MainDashboard() {
   const { getDocumentHeader, getDocumentFooter } = useProfile();
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  const processFile = async (file: File) => {
+  const processFile = useCallback(async (file: File) => {
     const ext = getExt(file.name);
     if (!ALLOWED_EXTS.has(ext)) {
       setError("Please upload a valid audio file (WAV, MP3, M4A, OGG).");
@@ -686,7 +718,7 @@ ${getDocumentFooter()}`;
       setIsLoading(false);
       setIsStreaming(false);
     }
-  };
+  }, [getDocumentHeader, getDocumentFooter]);
 
   const handleExportPDF = () => {
     if (!document) return;
@@ -726,7 +758,7 @@ ${getDocumentFooter()}`;
     setIsDragActive(false);
     const file = evt.dataTransfer.files?.[0];
     if (file) void processFile(file);
-  }, []);
+  }, [processFile]);
 
   const onDragOver = useCallback((evt: React.DragEvent<HTMLDivElement>) => {
     evt.preventDefault();
@@ -738,12 +770,12 @@ ${getDocumentFooter()}`;
     setIsDragActive(false);
   }, []);
 
-  const clearAll = () => {
+  const clearAll = useCallback(() => {
     setFileName(null);
     setError(null);
     setTranscript(null);
     setDocument(null);
-  };
+  }, []);
 
   const hasContent = !!(transcript || document || error || isStreaming);
 

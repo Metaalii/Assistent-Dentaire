@@ -43,7 +43,7 @@ class SimpleRateLimitMiddleware(BaseHTTPMiddleware):
     Thread-safe rate limiting middleware (optional, disabled by default).
 
     Kept for compatibility but disabled unless ENABLE_DEV_RATE_LIMIT=1.
-    Uses asyncio.Lock for thread-safe dictionary access.
+    Uses asyncio.Lock for thread-safe dictionary access with lazy initialization.
     """
     def __init__(self, app, *args, **kwargs):
         super().__init__(app)
@@ -61,9 +61,15 @@ class SimpleRateLimitMiddleware(BaseHTTPMiddleware):
             self.max_requests = kwargs.get("max_requests", 60)
             self.window_seconds = kwargs.get("window_seconds", 60)
             self.clients = {}  # ip -> (count, window_start)
-            self._lock = asyncio.Lock()  # Protect dictionary access
+            self._lock = None  # Lazy initialization for asyncio.Lock
             self._last_cleanup = time.time()
             self._cleanup_interval = 300  # Cleanup every 5 minutes instead of clearing all
+
+    def _get_lock(self) -> asyncio.Lock:
+        """Lazy initialization of asyncio.Lock to ensure it's created in async context."""
+        if self._lock is None:
+            self._lock = asyncio.Lock()
+        return self._lock
 
     async def dispatch(self, request: Request, call_next):
         if not self.enabled:
@@ -72,8 +78,8 @@ class SimpleRateLimitMiddleware(BaseHTTPMiddleware):
         client_host = request.client.host if request.client else "unknown"
         now = self._time.time()
 
-        # Thread-safe access to clients dictionary
-        async with self._lock:
+        # Thread-safe access to clients dictionary with lazy lock initialization
+        async with self._get_lock():
             count, start = self.clients.get(client_host, (0, now))
 
             # Reset window if expired

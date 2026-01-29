@@ -195,6 +195,9 @@ class LocalLLM:
             # Run streaming in thread pool to not block event loop
             queue: asyncio.Queue[str | None] = asyncio.Queue()
 
+            # Capture the running loop from the async context (not from the thread)
+            loop = asyncio.get_running_loop()
+
             def stream_worker():
                 try:
                     for token in self._llm(
@@ -205,22 +208,13 @@ class LocalLLM:
                         **GENERATION_PARAMS,
                     ):
                         chunk = token["choices"][0]["text"]
-                        asyncio.get_event_loop().call_soon_threadsafe(
-                            queue.put_nowait, chunk
-                        )
+                        loop.call_soon_threadsafe(queue.put_nowait, chunk)
                 except Exception as e:
                     logger.exception("Streaming generation error")
-                    asyncio.get_event_loop().call_soon_threadsafe(
-                        queue.put_nowait, None
-                    )
-                    raise
                 finally:
-                    asyncio.get_event_loop().call_soon_threadsafe(
-                        queue.put_nowait, None
-                    )
+                    loop.call_soon_threadsafe(queue.put_nowait, None)
 
             # Start streaming in background thread
-            loop = asyncio.get_event_loop()
             thread = threading.Thread(target=stream_worker, daemon=True)
             thread.start()
 

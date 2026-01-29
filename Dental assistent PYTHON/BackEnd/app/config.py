@@ -1,5 +1,6 @@
 import sys
 import logging
+import threading
 from pathlib import Path
 from typing import Tuple, Optional, Dict, Any
 from .platform import get_platform
@@ -58,9 +59,12 @@ class HardwareDetector:
     2. Verify llama-cpp-python GPU support
     3. Run probe test if available
     4. Return appropriate profile
+
+    Thread-safe with caching for performance.
     """
 
     _cached_result: Optional[Dict[str, Any]] = None
+    _cache_lock: threading.Lock = threading.Lock()
 
     @classmethod
     def detect(cls, force_refresh: bool = False) -> Dict[str, Any]:
@@ -75,49 +79,56 @@ class HardwareDetector:
             "detection_method": str,
         }
         """
+        # Quick check without lock for already cached result
         if cls._cached_result is not None and not force_refresh:
             return cls._cached_result
 
-        result = {
-            "profile": "cpu_only",
-            "gpu_detected": False,
-            "gpu_name": None,
-            "vram_gb": None,
-            "backend_gpu_support": False,
-            "detection_method": "none",
-        }
+        # Thread-safe initialization with double-checked locking
+        with cls._cache_lock:
+            # Check again inside lock in case another thread cached it
+            if cls._cached_result is not None and not force_refresh:
+                return cls._cached_result
 
-        # Tier 1: Detect GPU driver
-        gpu_info = cls._detect_gpu_driver()
-        if gpu_info:
-            result.update(gpu_info)
-            result["gpu_detected"] = True
+            result = {
+                "profile": "cpu_only",
+                "gpu_detected": False,
+                "gpu_name": None,
+                "vram_gb": None,
+                "backend_gpu_support": False,
+                "detection_method": "none",
+            }
 
-        # Tier 2: Check if llama-cpp-python has GPU support
-        backend_support = cls._check_backend_gpu_support()
-        result["backend_gpu_support"] = backend_support
+            # Tier 1: Detect GPU driver
+            gpu_info = cls._detect_gpu_driver()
+            if gpu_info:
+                result.update(gpu_info)
+                result["gpu_detected"] = True
 
-        # Tier 3: Determine profile based on detection
-        if result["gpu_detected"] and result["backend_gpu_support"]:
-            vram = result.get("vram_gb") or 0
-            if vram >= 8 or result.get("detection_method") == "apple_silicon":
-                result["profile"] = "high_vram"
-            elif vram >= 4:
-                result["profile"] = "low_vram"
-            else:
+            # Tier 2: Check if llama-cpp-python has GPU support
+            backend_support = cls._check_backend_gpu_support()
+            result["backend_gpu_support"] = backend_support
+
+            # Tier 3: Determine profile based on detection
+            if result["gpu_detected"] and result["backend_gpu_support"]:
+                vram = result.get("vram_gb") or 0
+                if vram >= 8 or result.get("detection_method") == "apple_silicon":
+                    result["profile"] = "high_vram"
+                elif vram >= 4:
+                    result["profile"] = "low_vram"
+                else:
+                    result["profile"] = "cpu_only"
+            elif result["gpu_detected"] and not result["backend_gpu_support"]:
+                # GPU exists but backend doesn't support it
+                logger.warning(
+                    "GPU detected (%s) but llama-cpp-python lacks GPU support. "
+                    "Reinstall with CUDA/Metal support for better performance.",
+                    result.get("gpu_name", "unknown")
+                )
                 result["profile"] = "cpu_only"
-        elif result["gpu_detected"] and not result["backend_gpu_support"]:
-            # GPU exists but backend doesn't support it
-            logger.warning(
-                "GPU detected (%s) but llama-cpp-python lacks GPU support. "
-                "Reinstall with CUDA/Metal support for better performance.",
-                result.get("gpu_name", "unknown")
-            )
-            result["profile"] = "cpu_only"
 
-        cls._cached_result = result
-        logger.info("Hardware detection: %s", result)
-        return result
+            cls._cached_result = result
+            logger.info("Hardware detection: %s", result)
+            return result
 
     @classmethod
     def _detect_gpu_driver(cls) -> Optional[Dict[str, Any]]:

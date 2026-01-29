@@ -127,6 +127,8 @@ export async function summarizeTextStream(
             return;
           }
 
+          if (!data) continue; // Skip empty data lines
+
           try {
             const parsed = JSON.parse(data);
             if (parsed.chunk) {
@@ -136,8 +138,29 @@ export async function summarizeTextStream(
               throw new Error(parsed.error);
             }
           } catch (parseErr) {
-            // Skip invalid JSON lines
-            console.warn("Failed to parse SSE data:", data);
+            // Skip invalid JSON lines (could be partial data)
+            if (data.length > 0) {
+              console.warn("Failed to parse SSE data:", data);
+            }
+          }
+        }
+      }
+    }
+
+    // Process any remaining data in the buffer before completing
+    if (buffer.trim()) {
+      const remainingLine = buffer.trim();
+      if (remainingLine.startsWith("data: ")) {
+        const data = remainingLine.slice(6).trim();
+        if (data && data !== "[DONE]") {
+          try {
+            const parsed = JSON.parse(data);
+            if (parsed.chunk) {
+              fullText += parsed.chunk;
+              onChunk(parsed.chunk);
+            }
+          } catch {
+            // Ignore parse errors for remaining buffer
           }
         }
       }
@@ -156,7 +179,9 @@ export async function summarizeTextStream(
 }
 
 export async function checkModelStatus(): Promise<HardwareInfo> {
-  const res = await fetch(`${BASE_URL}/setup/check-models`);
+  // Include auth headers for consistency (endpoint may require auth in future)
+  const headers = await authHeaders();
+  const res = await fetch(`${BASE_URL}/setup/check-models`, { headers });
   if (!res.ok) throw new Error(await safeError(res));
   return res.json();
 }
