@@ -156,8 +156,13 @@ export default function ModelSetup({ onReady }: Props) {
         if (cancelled) return;
 
         setHardware(status);
-        if (status.is_downloaded) onReady();
-        else setStep("confirm");
+        if (status.is_downloaded) {
+          // Model already present - go directly to app
+          onReady();
+        } else {
+          // Model not present - show confirmation screen
+          setStep("confirm");
+        }
       } catch {
         if (!cancelled) {
           setStep("error");
