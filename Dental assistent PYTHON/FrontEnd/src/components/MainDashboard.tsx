@@ -720,8 +720,22 @@ ${getDocumentFooter()}`;
     }
   }, [getDocumentHeader, getDocumentFooter]);
 
-  const handleExportPDF = () => {
+  const handleExportPDF = useCallback(() => {
     if (!document) return;
+
+    // Sanitize content to prevent XSS - escape HTML entities
+    const escapeHtml = (text: string): string => {
+      const htmlEntities: Record<string, string> = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+      };
+      return text.replace(/[&<>"']/g, (char) => htmlEntities[char] || char);
+    };
+
+    const sanitizedContent = escapeHtml(document).replace(/\n/g, '<br>');
 
     // Create a printable window
     const printWindow = window.open('', '_blank');
@@ -731,6 +745,7 @@ ${getDocumentFooter()}`;
         <html>
         <head>
           <title>Document Dentaire</title>
+          <meta charset="UTF-8">
           <style>
             body {
               font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -738,20 +753,19 @@ ${getDocumentFooter()}`;
               max-width: 800px;
               margin: 0 auto;
               line-height: 1.6;
-              white-space: pre-wrap;
             }
             @media print {
               body { padding: 20px; }
             }
           </style>
         </head>
-        <body>${document.replace(/\n/g, '<br>')}</body>
+        <body>${sanitizedContent}</body>
         </html>
       `);
       printWindow.document.close();
       printWindow.print();
     }
-  };
+  }, [document]);
 
   const onDrop = useCallback((evt: React.DragEvent<HTMLDivElement>) => {
     evt.preventDefault();

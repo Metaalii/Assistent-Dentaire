@@ -3,6 +3,7 @@ import ModelSetup from "./components/ModelSetup";
 import MainDashboard from "./components/MainDashboard";
 import LanguageSelector from "./components/LanguageSelector";
 import ProfileSetup from "./components/ProfileSetup";
+import ErrorBoundary from "./components/ErrorBoundary";
 import { LanguageProvider, useLanguage } from "./i18n";
 import { ToothIcon, HeartPulseIcon, AlertCircleIcon, RefreshIcon } from "./components/ui/Icons";
 import { Button, MedicalLoader } from "./components/ui";
@@ -236,13 +237,19 @@ function AppContent() {
   }
 
   if (boot.state === "setup") {
-    return <ModelSetup onReady={() => setBoot({ state: "ready" })} />;
+    return (
+      <ErrorBoundary>
+        <ModelSetup onReady={() => setBoot({ state: "ready" })} />
+      </ErrorBoundary>
+    );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#f8fafc] via-[#e6f4f9] to-[#f8fafc]">
-      <MainDashboard />
-    </div>
+    <ErrorBoundary>
+      <div className="min-h-screen bg-gradient-to-br from-[#f8fafc] via-[#e6f4f9] to-[#f8fafc]">
+        <MainDashboard />
+      </div>
+    </ErrorBoundary>
   );
 }
 

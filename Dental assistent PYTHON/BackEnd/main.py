@@ -14,9 +14,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from app.config import MODEL_CONFIGS, get_llm_model_path, analyze_hardware, get_hardware_info
+from app.config import MODEL_CONFIGS, ALTERNATIVE_MODELS, get_llm_model_path, analyze_hardware, get_hardware_info, get_model_recommendations
 from app.middleware import MaxRequestSizeMiddleware, SimpleRateLimitMiddleware
-from app.security import verify_api_key, check_api_key_configured
+from app.security import verify_api_key, check_api_key_configured, validate_security_config
 from app.llm_config import SMARTNOTE_PROMPT_OPTIMIZED
 
 logging.basicConfig(level=logging.INFO)
@@ -26,13 +26,10 @@ logger = logging.getLogger("dental_assistant")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler for startup and shutdown events."""
-    # Startup
-    if not check_api_key_configured():
-        logger.info(
-            "ℹ️  Using default development API key. "
-            "Set APP_API_KEY environment variable for production use."
-        )
-    else:
+    # Startup - validate security first (will raise in production without API key)
+    validate_security_config()
+
+    if check_api_key_configured():
         logger.info("✓ API key configured from environment")
 
     # Log hardware detection results
@@ -72,6 +69,48 @@ app.add_middleware(MaxRequestSizeMiddleware, max_bytes=100 * 1024 * 1024)
 app.add_middleware(SimpleRateLimitMiddleware)
 
 
+# --- Input Sanitization ---
+import re
+
+def sanitize_input(text: str, max_length: int = 50000) -> str:
+    """
+    Sanitize user input before LLM processing.
+
+    - Removes potential prompt injection patterns
+    - Limits text length to prevent memory issues
+    - Removes control characters except newlines
+    - Normalizes whitespace
+    """
+    if not text:
+        return ""
+
+    # Truncate to max length
+    text = text[:max_length]
+
+    # Remove control characters except newlines and tabs
+    text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', text)
+
+    # Remove potential prompt injection patterns (basic protection)
+    # These patterns try to override system instructions
+    injection_patterns = [
+        r'(?i)ignore\s+(all\s+)?(previous|above)\s+instructions?',
+        r'(?i)disregard\s+(all\s+)?(previous|above)',
+        r'(?i)forget\s+(everything|all)',
+        r'(?i)you\s+are\s+now\s+a',
+        r'(?i)new\s+instructions?:',
+        r'(?i)system\s*:\s*',
+    ]
+
+    for pattern in injection_patterns:
+        text = re.sub(pattern, '[FILTERED]', text)
+
+    # Normalize excessive whitespace (but keep structure)
+    text = re.sub(r'[ \t]+', ' ', text)  # Multiple spaces/tabs to single space
+    text = re.sub(r'\n{4,}', '\n\n\n', text)  # Max 3 consecutive newlines
+
+    return text.strip()
+
+
 # --- Business Logic ---
 class SummaryRequest(BaseModel):
     text: str
@@ -86,11 +125,16 @@ async def summarize(req: SummaryRequest):
     if not get_llm_model_path().exists():
         raise HTTPException(status_code=503, detail="Model not downloaded. Please run setup.")
 
+    # Sanitize input before LLM processing
+    sanitized_text = sanitize_input(req.text)
+    if not sanitized_text:
+        raise HTTPException(status_code=400, detail="Text input is empty or invalid.")
+
     # Lazy import: backend boots even without llama-cpp-python installed.
     from app.llm.local_llm import LocalLLM  # noqa: WPS433
 
     llm = LocalLLM()
-    prompt = SMARTNOTE_PROMPT_OPTIMIZED.format(text=req.text)
+    prompt = SMARTNOTE_PROMPT_OPTIMIZED.format(text=sanitized_text)
     summary = await llm.generate(prompt)
     return {"summary": summary}
 
@@ -108,10 +152,15 @@ async def summarize_stream(req: SummaryRequest):
     if not get_llm_model_path().exists():
         raise HTTPException(status_code=503, detail="Model not downloaded. Please run setup.")
 
+    # Sanitize input before LLM processing
+    sanitized_text = sanitize_input(req.text)
+    if not sanitized_text:
+        raise HTTPException(status_code=400, detail="Text input is empty or invalid.")
+
     from app.llm.local_llm import LocalLLM  # noqa: WPS433
 
     llm = LocalLLM()
-    prompt = SMARTNOTE_PROMPT_OPTIMIZED.format(text=req.text)
+    prompt = SMARTNOTE_PROMPT_OPTIMIZED.format(text=sanitized_text)
 
     async def event_generator():
         try:
@@ -211,6 +260,9 @@ async def check_models():
     # Validate model file exists AND has correct size
     is_valid = _is_model_valid(model_path, expected_size)
 
+    # Get alternative model recommendations
+    alternatives = ALTERNATIVE_MODELS.get(profile, [])
+
     return {
         # Core info
         "hardware_profile": profile,
@@ -226,7 +278,29 @@ async def check_models():
         "vram_gb": hw_info.get("vram_gb"),
         "backend_gpu_support": hw_info.get("backend_gpu_support", False),
         "detection_method": hw_info.get("detection_method", "none"),
+        # Alternative model recommendations
+        "alternative_models": alternatives,
+        "model_recommendation_note": _get_recommendation_note(profile),
     }
+
+
+def _get_recommendation_note(profile: str) -> str:
+    """Get a user-friendly recommendation note based on hardware profile."""
+    notes = {
+        "high_vram": (
+            "Votre GPU puissant permet d'utiliser des modèles de haute qualité. "
+            "Mistral 7B est recommandé pour un excellent support du français."
+        ),
+        "low_vram": (
+            "Votre GPU a une VRAM limitée. Les modèles Q4 offrent un bon équilibre. "
+            "Mistral 7B Q4 est idéal pour le français médical."
+        ),
+        "cpu_only": (
+            "Mode CPU détecté. Les modèles compacts comme Phi-3 Mini ou Mistral Q3 "
+            "offrent de bonnes performances. Le traitement sera plus lent qu'avec un GPU."
+        ),
+    }
+    return notes.get(profile, "")
 
 
 @app.post("/setup/download-model", dependencies=[Depends(verify_api_key)])

@@ -190,12 +190,18 @@ def get_device_settings() -> Tuple[str, str]:
 # -------- Model configs --------
 # IMPORTANT: filenames differ per profile to avoid ambiguity / accidental overwrites.
 
+# ============================================
+# MODEL CONFIGURATIONS BY HARDWARE PROFILE
+# ============================================
+# Each profile has a default model and alternative recommendations
+# Users can choose based on their specific needs (speed vs quality)
+
 MODEL_CONFIGS = {
     "high_vram": {
         "url": "https://huggingface.co/bartowski/Meta-Llama-3-8B-Instruct-GGUF/resolve/main/Meta-Llama-3-8B-Instruct-Q6_K.gguf",
         "filename": "Meta-Llama-3-8B-Instruct-Q6_K.gguf",
         "size_gb": 6.6,
-        "description": "Highest quality, best for powerful GPUs",
+        "description": "Highest quality, best for powerful GPUs (≥8GB VRAM)",
     },
     "low_vram": {
         "url": "https://huggingface.co/bartowski/Meta-Llama-3-8B-Instruct-GGUF/resolve/main/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf",
@@ -210,6 +216,92 @@ MODEL_CONFIGS = {
         "description": "Optimized for CPU, smallest size",
     },
 }
+
+# ============================================
+# ALTERNATIVE MODEL RECOMMENDATIONS
+# ============================================
+# These models can be used as alternatives based on user preference
+# Includes Mistral for better French language support
+
+ALTERNATIVE_MODELS = {
+    "high_vram": [
+        {
+            "id": "mistral-7b-instruct-q6",
+            "name": "Mistral 7B Instruct Q6",
+            "url": "https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.2-GGUF/resolve/main/mistral-7b-instruct-v0.2.Q6_K.gguf",
+            "filename": "mistral-7b-instruct-v0.2.Q6_K.gguf",
+            "size_gb": 5.9,
+            "description": "Excellent for French, very fast",
+            "recommended_for": ["French", "Speed", "Medical"],
+        },
+        {
+            "id": "llama3-8b-q8",
+            "name": "Llama 3 8B Q8 (Maximum Quality)",
+            "url": "https://huggingface.co/bartowski/Meta-Llama-3-8B-Instruct-GGUF/resolve/main/Meta-Llama-3-8B-Instruct-Q8_0.gguf",
+            "filename": "Meta-Llama-3-8B-Instruct-Q8_0.gguf",
+            "size_gb": 8.5,
+            "description": "Maximum quality, requires ≥12GB VRAM",
+            "recommended_for": ["Quality", "Accuracy"],
+        },
+    ],
+    "low_vram": [
+        {
+            "id": "mistral-7b-instruct-q4",
+            "name": "Mistral 7B Instruct Q4",
+            "url": "https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.2-GGUF/resolve/main/mistral-7b-instruct-v0.2.Q4_K_M.gguf",
+            "filename": "mistral-7b-instruct-v0.2.Q4_K_M.gguf",
+            "size_gb": 4.4,
+            "description": "Best for French language, good balance",
+            "recommended_for": ["French", "Speed"],
+        },
+        {
+            "id": "phi3-mini-q4",
+            "name": "Phi-3 Mini Q4 (Ultra Fast)",
+            "url": "https://huggingface.co/microsoft/Phi-3-mini-4k-instruct-gguf/resolve/main/Phi-3-mini-4k-instruct-q4.gguf",
+            "filename": "Phi-3-mini-4k-instruct-q4.gguf",
+            "size_gb": 2.2,
+            "description": "Very fast, good for simple notes",
+            "recommended_for": ["Speed", "Low Memory"],
+        },
+    ],
+    "cpu_only": [
+        {
+            "id": "mistral-7b-instruct-q3",
+            "name": "Mistral 7B Instruct Q3 (CPU Optimized)",
+            "url": "https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.2-GGUF/resolve/main/mistral-7b-instruct-v0.2.Q3_K_M.gguf",
+            "filename": "mistral-7b-instruct-v0.2.Q3_K_M.gguf",
+            "size_gb": 3.5,
+            "description": "CPU optimized, good French support",
+            "recommended_for": ["French", "CPU"],
+        },
+        {
+            "id": "phi3-mini-q3",
+            "name": "Phi-3 Mini Q3 (Fastest)",
+            "url": "https://huggingface.co/microsoft/Phi-3-mini-4k-instruct-gguf/resolve/main/Phi-3-mini-4k-instruct-q3_k_m.gguf",
+            "filename": "Phi-3-mini-4k-instruct-q3_k_m.gguf",
+            "size_gb": 1.8,
+            "description": "Ultra fast on CPU, lightweight",
+            "recommended_for": ["Speed", "Low Memory", "CPU"],
+        },
+    ],
+}
+
+
+def get_model_recommendations(profile: str = None) -> dict:
+    """
+    Get model recommendations based on hardware profile.
+
+    Returns:
+        dict with 'default' model and 'alternatives' list
+    """
+    if profile is None:
+        profile = analyze_hardware()
+
+    return {
+        "profile": profile,
+        "default": MODEL_CONFIGS.get(profile, MODEL_CONFIGS["cpu_only"]),
+        "alternatives": ALTERNATIVE_MODELS.get(profile, []),
+    }
 
 
 def get_llm_model_path(profile: str = None) -> Path:
