@@ -34,14 +34,18 @@ class LocalLLM:
     - No heavy imports at module import time
     - Lazy model loading with hardware detection
     - Automatic GPU layer offloading based on detected hardware
-    - Single in-flight inference at a time
+    - Single in-flight inference at a time with request queuing
     - Thread-safe initialization
     - Streaming support for reduced perceived latency
     - Optimized memory configuration
+    - Queue status tracking for UX feedback
     """
 
     _instance: Optional["LocalLLM"] = None
     _instance_lock = threading.Lock()
+
+    # Default timeout for waiting in queue (5 minutes)
+    DEFAULT_QUEUE_TIMEOUT = 300
 
     def __new__(cls) -> "LocalLLM":
         if cls._instance is None:
@@ -52,7 +56,25 @@ class LocalLLM:
                     cls._instance._load_lock = threading.Lock()
                     cls._instance._inference_semaphore = asyncio.Semaphore(1)
                     cls._instance._hw_profile = None
+                    cls._instance._queue_count = 0
+                    cls._instance._queue_lock = threading.Lock()
         return cls._instance
+
+    def get_queue_status(self) -> dict:
+        """Get current queue status for UX feedback."""
+        with self._queue_lock:
+            return {
+                "waiting": self._queue_count,
+                "is_busy": self._queue_count > 0
+            }
+
+    def _increment_queue(self):
+        with self._queue_lock:
+            self._queue_count += 1
+
+    def _decrement_queue(self):
+        with self._queue_lock:
+            self._queue_count = max(0, self._queue_count - 1)
 
     def _ensure_model_file(self) -> Path:
         model_path = get_llm_model_path()
@@ -166,64 +188,115 @@ class LocalLLM:
 
         return chunks if chunks else [text]
 
-    async def generate(self, prompt: str) -> str:
+    async def generate(self, prompt: str, timeout: Optional[float] = None) -> str:
         """
         Generate text from the local LLM.
-        Enforces single in-flight inference.
+        Enforces single in-flight inference with queue management.
         Handles long text by chunking if necessary.
+
+        Args:
+            prompt: The prompt to generate from
+            timeout: Maximum time to wait in queue (default: 5 minutes)
+
+        Raises:
+            HTTPException: If queue timeout is exceeded
         """
         self._load_model_if_needed()
+        timeout = timeout or self.DEFAULT_QUEUE_TIMEOUT
 
-        async with self._inference_semaphore:
-            # Check if text is too long and needs chunking
-            estimated_tokens = self._estimate_tokens(prompt)
+        # Track queue position
+        self._increment_queue()
+        try:
+            # Wait for semaphore with timeout
+            try:
+                await asyncio.wait_for(
+                    self._inference_semaphore.acquire(),
+                    timeout=timeout
+                )
+            except asyncio.TimeoutError:
+                raise HTTPException(
+                    status_code=503,
+                    detail="Server is busy processing other requests. Please try again later."
+                )
 
-            if estimated_tokens > CHUNKING_THRESHOLD:
-                logger.info("Long text detected (%d estimated tokens), using chunked summarization", estimated_tokens)
-                return await asyncio.to_thread(self._generate_chunked_sync, prompt)
-            else:
-                return await asyncio.to_thread(self._generate_sync, prompt)
+            try:
+                # Check if text is too long and needs chunking
+                estimated_tokens = self._estimate_tokens(prompt)
 
-    async def generate_stream(self, prompt: str) -> AsyncIterator[str]:
+                if estimated_tokens > CHUNKING_THRESHOLD:
+                    logger.info("Long text detected (%d estimated tokens), using chunked summarization", estimated_tokens)
+                    return await asyncio.to_thread(self._generate_chunked_sync, prompt)
+                else:
+                    return await asyncio.to_thread(self._generate_sync, prompt)
+            finally:
+                self._inference_semaphore.release()
+        finally:
+            self._decrement_queue()
+
+    async def generate_stream(self, prompt: str, timeout: Optional[float] = None) -> AsyncIterator[str]:
         """
         Stream tokens as they are generated for reduced perceived latency.
         Yields chunks of text as they become available.
+
+        Args:
+            prompt: The prompt to generate from
+            timeout: Maximum time to wait in queue (default: 5 minutes)
         """
         self._load_model_if_needed()
+        timeout = timeout or self.DEFAULT_QUEUE_TIMEOUT
 
-        async with self._inference_semaphore:
-            # Run streaming in thread pool to not block event loop
-            queue: asyncio.Queue[str | None] = asyncio.Queue()
+        # Track queue position
+        self._increment_queue()
+        try:
+            # Wait for semaphore with timeout
+            try:
+                await asyncio.wait_for(
+                    self._inference_semaphore.acquire(),
+                    timeout=timeout
+                )
+            except asyncio.TimeoutError:
+                raise HTTPException(
+                    status_code=503,
+                    detail="Server is busy processing other requests. Please try again later."
+                )
 
-            # Capture the running loop from the async context (not from the thread)
-            loop = asyncio.get_running_loop()
+            try:
+                # Run streaming in thread pool to not block event loop
+                queue: asyncio.Queue[str | None] = asyncio.Queue()
 
-            def stream_worker():
-                try:
-                    for token in self._llm(
-                        prompt,
-                        max_tokens=MAX_GENERATION_TOKENS,
-                        stop=STOP_TOKENS,
-                        stream=True,
-                        **GENERATION_PARAMS,
-                    ):
-                        chunk = token["choices"][0]["text"]
-                        loop.call_soon_threadsafe(queue.put_nowait, chunk)
-                except Exception as e:
-                    logger.exception("Streaming generation error")
-                finally:
-                    loop.call_soon_threadsafe(queue.put_nowait, None)
+                # Capture the running loop from the async context (not from the thread)
+                loop = asyncio.get_running_loop()
 
-            # Start streaming in background thread
-            thread = threading.Thread(target=stream_worker, daemon=True)
-            thread.start()
+                def stream_worker():
+                    try:
+                        for token in self._llm(
+                            prompt,
+                            max_tokens=MAX_GENERATION_TOKENS,
+                            stop=STOP_TOKENS,
+                            stream=True,
+                            **GENERATION_PARAMS,
+                        ):
+                            chunk = token["choices"][0]["text"]
+                            loop.call_soon_threadsafe(queue.put_nowait, chunk)
+                    except Exception as e:
+                        logger.exception("Streaming generation error")
+                    finally:
+                        loop.call_soon_threadsafe(queue.put_nowait, None)
 
-            # Yield tokens as they arrive
-            while True:
-                chunk = await queue.get()
-                if chunk is None:
-                    break
-                yield chunk
+                # Start streaming in background thread
+                thread = threading.Thread(target=stream_worker, daemon=True)
+                thread.start()
+
+                # Yield tokens as they arrive
+                while True:
+                    chunk = await queue.get()
+                    if chunk is None:
+                        break
+                    yield chunk
+            finally:
+                self._inference_semaphore.release()
+        finally:
+            self._decrement_queue()
 
     def _generate_chunked_sync(self, prompt: str) -> str:
         """Handle long transcriptions by chunking and combining summaries."""

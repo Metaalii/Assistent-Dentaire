@@ -15,6 +15,35 @@ DEFAULT_DEV_KEY = "dental-assistant-local-dev-key"
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=True)
 
 
+def is_production_mode() -> bool:
+    """
+    Check if running in production mode.
+    Production is detected via ENV=production or PRODUCTION=1 environment variable.
+    """
+    env = os.getenv("ENV", "").lower()
+    production_flag = os.getenv("PRODUCTION", "0")
+    return env == "production" or production_flag == "1"
+
+
+def validate_security_config():
+    """
+    Validate security configuration at startup.
+    Raises RuntimeError in production if API key is not configured.
+    """
+    if is_production_mode() and not check_api_key_configured():
+        raise RuntimeError(
+            "SECURITY ERROR: API key must be configured in production mode. "
+            "Set APP_API_KEY environment variable."
+        )
+
+    if not check_api_key_configured():
+        logger.warning(
+            "⚠️  Using default development API key. "
+            "This is insecure for production deployments. "
+            "Set APP_API_KEY environment variable for production."
+        )
+
+
 async def verify_api_key(api_key: str = Security(api_key_header)):
     """
     Verify the API key from request headers.
@@ -26,7 +55,7 @@ async def verify_api_key(api_key: str = Security(api_key_header)):
 
     # Invalid API key provided
     if api_key != expected:
-        logger.warning("Invalid API key attempt")
+        logger.warning("Invalid API key attempt from request")
         raise HTTPException(
             status_code=403,
             detail="Invalid API key"
