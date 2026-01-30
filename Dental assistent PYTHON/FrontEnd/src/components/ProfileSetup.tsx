@@ -71,7 +71,7 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ onComplete }) => {
               type="text"
               value={formData.name}
               onChange={(e) => handleChange("name", e.target.value)}
-              placeholder="Dr Rudy PEREZ"
+              placeholder="Dr Marie DUPONT"
               className="w-full px-4 py-3 rounded-xl border-2 border-[#e2e8f0] bg-white/80 text-[#1e293b] placeholder-[#94a3b8] focus:border-[#2d96c6] focus:ring-2 focus:ring-[#2d96c6]/20 outline-none transition-all"
               required
             />
@@ -100,7 +100,7 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ onComplete }) => {
               type="text"
               value={formData.address}
               onChange={(e) => handleChange("address", e.target.value)}
-              placeholder="8, rue Andrioli – 06000 NICE"
+              placeholder="15, avenue Victor Hugo – 75016 PARIS"
               className="w-full px-4 py-3 rounded-xl border-2 border-[#e2e8f0] bg-white/80 text-[#1e293b] placeholder-[#94a3b8] focus:border-[#2d96c6] focus:ring-2 focus:ring-[#2d96c6]/20 outline-none transition-all"
             />
           </div>
@@ -114,7 +114,7 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ onComplete }) => {
               type="tel"
               value={formData.phone}
               onChange={(e) => handleChange("phone", e.target.value)}
-              placeholder="04 93 44 78 06"
+              placeholder="01 23 45 67 89"
               className="w-full px-4 py-3 rounded-xl border-2 border-[#e2e8f0] bg-white/80 text-[#1e293b] placeholder-[#94a3b8] focus:border-[#2d96c6] focus:ring-2 focus:ring-[#2d96c6]/20 outline-none transition-all"
             />
           </div>
@@ -128,7 +128,7 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ onComplete }) => {
               type="email"
               value={formData.email}
               onChange={(e) => handleChange("email", e.target.value)}
-              placeholder="dr.perez.rudy@gmail.com"
+              placeholder="contact@cabinet-dentaire.fr"
               className="w-full px-4 py-3 rounded-xl border-2 border-[#e2e8f0] bg-white/80 text-[#1e293b] placeholder-[#94a3b8] focus:border-[#2d96c6] focus:ring-2 focus:ring-[#2d96c6]/20 outline-none transition-all"
             />
           </div>
