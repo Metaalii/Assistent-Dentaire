@@ -149,28 +149,8 @@ class LinuxPlatform(PlatformBase):
         Returns:
             True if CUDA backend is supported
         """
-        # Check environment hints
-        if os.getenv("LLAMA_CUBLAS") == "1":
-            return True
-
-        # Try to load CUDA runtime library on Linux
-        try:
-            import ctypes
-            ctypes.CDLL("libcudart.so")
-            return True
-        except OSError:
-            # Try alternative CUDA versions
-            try:
-                ctypes.CDLL("libcudart.so.11")
-                return True
-            except OSError:
-                try:
-                    ctypes.CDLL("libcudart.so.12")
-                    return True
-                except OSError:
-                    pass
-
-        return False
+        # Use shared cross-platform CUDA detection from base class
+        return self.check_cuda_available()
 
     @classmethod
     def get_platform_name(cls) -> str:

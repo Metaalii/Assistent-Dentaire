@@ -141,24 +141,8 @@ class WindowsPlatform(PlatformBase):
         Returns:
             True if GPU backend is supported
         """
-        # Check environment hints
-        if os.getenv("LLAMA_CUBLAS") == "1":
-            return True
-
-        # On Windows, check for CUDA DLLs
-        try:
-            import ctypes
-            # Try to load CUDA runtime DLL
-            ctypes.CDLL("cudart64_110.dll")  # CUDA 11.x
-            return True
-        except OSError:
-            try:
-                ctypes.CDLL("cudart64_12.dll")  # CUDA 12.x
-                return True
-            except OSError:
-                pass
-
-        return False
+        # Use shared cross-platform CUDA detection from base class
+        return self.check_cuda_available()
 
     @classmethod
     def get_platform_name(cls) -> str:
