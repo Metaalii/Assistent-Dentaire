@@ -105,7 +105,8 @@ def build_backend():
         # Collect all app packages
         "--collect-all", "app",
         # Additional data files if needed
-        "--add-data", f"{backend_dir / 'app'}:app",
+        # PyInstaller uses ';' on Windows and ':' on Unix for --add-data separator
+        "--add-data", f"{backend_dir / 'app'}{os.pathsep}app",
         # Clean build
         "--clean",
         "--noconfirm",
