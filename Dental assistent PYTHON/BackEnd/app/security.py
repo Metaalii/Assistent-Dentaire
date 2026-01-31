@@ -70,8 +70,3 @@ def check_api_key_configured() -> bool:
     Returns True if configured via environment variable, False if using default.
     """
     return os.getenv("APP_API_KEY") is not None
-
-
-def get_active_api_key() -> str:
-    """Get the currently active API key (env var or default)."""
-    return os.getenv("APP_API_KEY", DEFAULT_DEV_KEY)

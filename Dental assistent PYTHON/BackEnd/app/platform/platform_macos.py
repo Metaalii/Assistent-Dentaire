@@ -33,7 +33,7 @@ class MacOSPlatform(PlatformBase):
         """
         Detect GPU on macOS.
         Primarily detects Apple Silicon (M1/M2/M3/M4).
-        Also checks for NVIDIA (legacy Mac Pro with eGPU).
+        Also checks for NVIDIA (legacy Mac Pro with eGPU) using shared base method.
 
         Returns:
             GPU info dict or None
@@ -91,46 +91,6 @@ class MacOSPlatform(PlatformBase):
                     }
         except Exception as e:
             logger.debug("Apple Silicon detection failed on macOS: %s", e)
-
-        return None
-
-    def _detect_nvidia(self) -> Optional[Dict[str, Any]]:
-        """
-        Detect NVIDIA GPU on macOS (legacy Mac Pro or eGPU).
-        Most modern Macs don't support NVIDIA GPUs.
-
-        Returns:
-            GPU info dict or None
-        """
-        try:
-            result = subprocess.run(
-                [
-                    "nvidia-smi",
-                    "--query-gpu=name,memory.total",
-                    "--format=csv,noheader,nounits"
-                ],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-
-            if result.returncode == 0 and result.stdout.strip():
-                line = result.stdout.strip().split("\n")[0]
-                parts = line.split(", ")
-                if len(parts) >= 2:
-                    gpu_name = parts[0].strip()
-                    vram_mb = float(parts[1].strip())
-                    vram_gb = vram_mb / 1024
-
-                    return {
-                        "gpu_name": gpu_name,
-                        "vram_gb": round(vram_gb, 1),
-                        "detection_method": "nvidia_smi",
-                    }
-        except FileNotFoundError:
-            logger.debug("nvidia-smi not found on macOS (expected on Apple Silicon)")
-        except Exception as e:
-            logger.debug("NVIDIA detection failed on macOS: %s", e)
 
         return None
 

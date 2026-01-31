@@ -7,6 +7,7 @@ import ctypes
 import glob
 import logging
 import os
+import subprocess
 import sys
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -189,3 +190,94 @@ class PlatformBase(ABC):
             return True
         except OSError:
             return False
+
+    def _detect_nvidia(self) -> Optional[Dict[str, Any]]:
+        """
+        Detect NVIDIA GPU using nvidia-smi.
+        Cross-platform method that works on Windows, Linux, and macOS.
+
+        Returns:
+            GPU info dict or None
+        """
+        try:
+            result = subprocess.run(
+                [
+                    "nvidia-smi",
+                    "--query-gpu=name,memory.total",
+                    "--format=csv,noheader,nounits"
+                ],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+
+            if result.returncode == 0 and result.stdout.strip():
+                line = result.stdout.strip().split("\n")[0]
+                parts = line.split(", ")
+                if len(parts) >= 2:
+                    gpu_name = parts[0].strip()
+                    vram_mb = float(parts[1].strip())
+                    vram_gb = vram_mb / 1024
+
+                    return {
+                        "gpu_name": gpu_name,
+                        "vram_gb": round(vram_gb, 1),
+                        "detection_method": "nvidia_smi",
+                    }
+        except FileNotFoundError:
+            logger.debug("nvidia-smi not found")
+        except Exception as e:
+            logger.debug("NVIDIA detection failed: %s", e)
+
+        return None
+
+    def _detect_amd(self) -> Optional[Dict[str, Any]]:
+        """
+        Detect AMD GPU using rocm-smi.
+        Cross-platform method for AMD ROCm detection.
+
+        Returns:
+            GPU info dict or None
+        """
+        try:
+            result = subprocess.run(
+                ["rocm-smi", "--showproductname"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+
+            if result.returncode == 0 and result.stdout.strip():
+                for line in result.stdout.split("\n"):
+                    if "GPU" in line or "Card" in line:
+                        gpu_name = line.strip()
+
+                        # Try to get VRAM
+                        vram_result = subprocess.run(
+                            ["rocm-smi", "--showmeminfo", "vram"],
+                            capture_output=True,
+                            text=True,
+                            timeout=5,
+                        )
+
+                        vram_gb = None
+                        if vram_result.returncode == 0:
+                            for vline in vram_result.stdout.split("\n"):
+                                if "Total" in vline:
+                                    parts = vline.split()
+                                    for p in parts:
+                                        if p.isdigit():
+                                            vram_gb = float(p) / 1024
+                                            break
+
+                        return {
+                            "gpu_name": gpu_name,
+                            "vram_gb": round(vram_gb, 1) if vram_gb else None,
+                            "detection_method": "rocm_smi",
+                        }
+        except FileNotFoundError:
+            logger.debug("rocm-smi not found")
+        except Exception as e:
+            logger.debug("AMD detection failed: %s", e)
+
+        return None
