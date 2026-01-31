@@ -104,8 +104,8 @@ def build_backend():
         "--hidden-import", "app.platform",
         # Collect all app packages
         "--collect-all", "app",
-        # Additional data files if needed
-        "--add-data", f"{backend_dir / 'app'}:app",
+        # Additional data files if needed (use os.pathsep for cross-platform: ; on Windows, : on Unix)
+        "--add-data", f"{backend_dir / 'app'}{os.pathsep}app",
         # Clean build
         "--clean",
         "--noconfirm",

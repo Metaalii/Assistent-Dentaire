@@ -145,19 +145,37 @@ class WindowsPlatform(PlatformBase):
         if os.getenv("LLAMA_CUBLAS") == "1":
             return True
 
-        # On Windows, check for CUDA DLLs
-        try:
-            import ctypes
-            # Try to load CUDA runtime DLL
-            ctypes.CDLL("cudart64_110.dll")  # CUDA 11.x
+        # Check if CUDA_PATH is set (standard CUDA installation)
+        cuda_path = os.getenv("CUDA_PATH")
+        if cuda_path and Path(cuda_path).exists():
+            logger.debug("CUDA_PATH found: %s", cuda_path)
             return True
-        except OSError:
+
+        # On Windows, check for CUDA DLLs (try multiple versions)
+        import ctypes
+
+        # List of common CUDA runtime DLL names (CUDA 10.x through 12.x)
+        cuda_dlls = [
+            # CUDA 12.x
+            "cudart64_120.dll", "cudart64_121.dll", "cudart64_122.dll",
+            "cudart64_123.dll", "cudart64_124.dll", "cudart64_12.dll",
+            # CUDA 11.x
+            "cudart64_110.dll", "cudart64_111.dll", "cudart64_112.dll",
+            "cudart64_113.dll", "cudart64_114.dll", "cudart64_115.dll",
+            "cudart64_116.dll", "cudart64_117.dll", "cudart64_118.dll",
+            # CUDA 10.x (older but still used)
+            "cudart64_101.dll", "cudart64_102.dll",
+        ]
+
+        for dll in cuda_dlls:
             try:
-                ctypes.CDLL("cudart64_12.dll")  # CUDA 12.x
+                ctypes.CDLL(dll)
+                logger.debug("Found CUDA DLL: %s", dll)
                 return True
             except OSError:
-                pass
+                continue
 
+        logger.debug("No CUDA support detected on Windows")
         return False
 
     @classmethod
