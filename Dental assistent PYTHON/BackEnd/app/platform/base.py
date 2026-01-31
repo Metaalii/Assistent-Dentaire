@@ -113,13 +113,21 @@ class PlatformBase(ABC):
         return False
 
     def _get_windows_cuda_paths(self) -> List[str]:
-        """Get common CUDA installation paths on Windows."""
+        """
+        Get common CUDA installation paths on Windows.
+
+        Note: These paths are only used for searching - the actual CUDA availability
+        is verified by attempting to load the DLL with ctypes.CDLL, not by path existence.
+        """
         paths = []
 
         # CUDA_PATH environment variable (standard NVIDIA installation)
+        # We add this to search paths but verify by loading the DLL
         cuda_path = os.getenv("CUDA_PATH")
         if cuda_path:
-            paths.append(os.path.join(cuda_path, "bin"))
+            bin_path = os.path.join(cuda_path, "bin")
+            if os.path.isdir(bin_path):
+                paths.append(bin_path)
 
         # Common installation directories
         program_files = os.getenv("ProgramFiles", r"C:\Program Files")
@@ -141,7 +149,12 @@ class PlatformBase(ABC):
         return paths
 
     def _get_linux_cuda_paths(self) -> List[str]:
-        """Get common CUDA installation paths on Linux."""
+        """
+        Get common CUDA installation paths on Linux.
+
+        Note: These paths are only used for searching - the actual CUDA availability
+        is verified by attempting to load the library with ctypes.CDLL.
+        """
         paths = [
             "/usr/local/cuda/lib64",
             "/usr/local/cuda/lib",
