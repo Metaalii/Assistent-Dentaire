@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { summarizeTextStream, transcribeAudio } from "../api";
 import { useProfile } from "../hooks/useProfile";
+import { useLanguage } from "../i18n";
 import {
   Button,
   Card,
@@ -38,47 +39,51 @@ function getExt(name: string) {
 const Header: React.FC<{ onClear: () => void; hasContent: boolean }> = React.memo(({
   onClear,
   hasContent,
-}) => (
-  <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-[#e2e8f0] shadow-sm">
-    <Container>
-      <div className="flex items-center justify-between py-4">
-        {/* Logo and title */}
-        <div className="flex items-center gap-4">
-          <div className="relative">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#2d96c6] to-[#28b5ad] shadow-lg shadow-[#2d96c6]/30 flex items-center justify-center">
-              <ToothIcon className="text-white" size={24} />
-            </div>
-            <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-white shadow-md flex items-center justify-center">
-              <HeartPulseIcon className="text-[#28b5ad]" size={12} />
-            </div>
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-[#1e293b]">Dental Assistant</h1>
-            <p className="text-sm text-[#64748b]">AI-Powered Documentation</p>
-          </div>
-        </div>
+}) => {
+  const { t } = useLanguage();
 
-        {/* Actions */}
-        <div className="flex items-center gap-3">
-          <Badge variant="success">
-            <span className="w-2 h-2 rounded-full bg-[#10b981] animate-pulse" />
-            Online
-          </Badge>
-          {hasContent && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onClear}
-              leftIcon={<XIcon size={16} />}
-            >
-              Clear
-            </Button>
-          )}
+  return (
+    <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-[#e2e8f0] shadow-sm">
+      <Container>
+        <div className="flex items-center justify-between py-4">
+          {/* Logo and title */}
+          <div className="flex items-center gap-4">
+            <div className="relative">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#2d96c6] to-[#28b5ad] shadow-lg shadow-[#2d96c6]/30 flex items-center justify-center">
+                <ToothIcon className="text-white" size={24} />
+              </div>
+              <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-white shadow-md flex items-center justify-center">
+                <HeartPulseIcon className="text-[#28b5ad]" size={12} />
+              </div>
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-[#1e293b]">{t("appName")}</h1>
+              <p className="text-sm text-[#64748b]">{t("aiPoweredDocumentation")}</p>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center gap-3">
+            <Badge variant="success">
+              <span className="w-2 h-2 rounded-full bg-[#10b981] animate-pulse" />
+              {t("online")}
+            </Badge>
+            {hasContent && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onClear}
+                leftIcon={<XIcon size={16} />}
+              >
+                {t("clear")}
+              </Button>
+            )}
+          </div>
         </div>
-      </div>
-    </Container>
-  </header>
-));
+      </Container>
+    </header>
+  );
+});
 
 Header.displayName = 'Header';
 
@@ -105,116 +110,119 @@ const UploadZone: React.FC<UploadZoneProps> = React.memo(({
   onDragLeave,
   onDrop,
   inputRef,
-}) => (
-  <Card
-    className={`
-      relative overflow-hidden transition-all duration-300
-      ${isDragActive ? "ring-4 ring-[#2d96c6]/30 border-[#2d96c6]" : ""}
-      ${isLoading ? "opacity-50 pointer-events-none" : ""}
-    `}
-    hover={!isLoading}
-  >
-    {/* Gradient background pattern */}
-    <div className="absolute inset-0 bg-gradient-to-br from-[#f0f7fc]/50 via-white to-[#effcfb]/50 pointer-events-none" />
+}) => {
+  const { t } = useLanguage();
 
-    {/* Decorative circles */}
-    <div className="absolute -top-20 -right-20 w-40 h-40 bg-gradient-to-br from-[#2d96c6]/10 to-transparent rounded-full blur-2xl pointer-events-none" />
-    <div className="absolute -bottom-20 -left-20 w-40 h-40 bg-gradient-to-tr from-[#28b5ad]/10 to-transparent rounded-full blur-2xl pointer-events-none" />
+  return (
+    <Card
+      className={`
+        relative overflow-hidden transition-all duration-300
+        ${isDragActive ? "ring-4 ring-[#2d96c6]/30 border-[#2d96c6]" : ""}
+        ${isLoading ? "opacity-50 pointer-events-none" : ""}
+      `}
+      hover={!isLoading}
+    >
+      {/* Gradient background pattern */}
+      <div className="absolute inset-0 bg-gradient-to-br from-[#f0f7fc]/50 via-white to-[#effcfb]/50 pointer-events-none" />
 
-    <CardBody className="relative">
-      <div
-        className="flex flex-col items-center justify-center py-12 cursor-pointer"
-        onClick={() => inputRef.current?.click()}
-        onDrop={onDrop}
-        onDragOver={onDragOver}
-        onDragLeave={onDragLeave}
-        role="button"
-        tabIndex={0}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") inputRef.current?.click();
-        }}
-      >
-        {/* Upload icon */}
+      {/* Decorative circles */}
+      <div className="absolute -top-20 -right-20 w-40 h-40 bg-gradient-to-br from-[#2d96c6]/10 to-transparent rounded-full blur-2xl pointer-events-none" />
+      <div className="absolute -bottom-20 -left-20 w-40 h-40 bg-gradient-to-tr from-[#28b5ad]/10 to-transparent rounded-full blur-2xl pointer-events-none" />
+
+      <CardBody className="relative">
         <div
-          className={`
-            w-20 h-20 rounded-2xl flex items-center justify-center mb-6
-            transition-all duration-300
-            ${
-              isDragActive
-                ? "bg-gradient-to-br from-[#2d96c6] to-[#28b5ad] scale-110"
-                : "bg-gradient-to-br from-[#f0f7fc] to-[#effcfb]"
-            }
-          `}
+          className="flex flex-col items-center justify-center py-12 cursor-pointer"
+          onClick={() => inputRef.current?.click()}
+          onDrop={onDrop}
+          onDragOver={onDragOver}
+          onDragLeave={onDragLeave}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") inputRef.current?.click();
+          }}
         >
-          <UploadCloudIcon
-            className={isDragActive ? "text-white" : "text-[#2d96c6]"}
-            size={40}
+          {/* Upload icon */}
+          <div
+            className={`
+              w-20 h-20 rounded-2xl flex items-center justify-center mb-6
+              transition-all duration-300
+              ${
+                isDragActive
+                  ? "bg-gradient-to-br from-[#2d96c6] to-[#28b5ad] scale-110"
+                  : "bg-gradient-to-br from-[#f0f7fc] to-[#effcfb]"
+              }
+            `}
+          >
+            <UploadCloudIcon
+              className={isDragActive ? "text-white" : "text-[#2d96c6]"}
+              size={40}
+            />
+          </div>
+
+          {/* Title */}
+          <h3 className="text-xl font-semibold text-[#1e293b] mb-2">
+            {isDragActive ? t("dropAudioHere") : t("uploadAudioRecording")}
+          </h3>
+
+          {/* Description */}
+          <p className="text-[#64748b] mb-6 text-center max-w-md">
+            {t("dragAndDropAudio")}
+          </p>
+
+          {/* File type badges */}
+          <div className="flex flex-wrap justify-center gap-2 mb-6">
+            {["WAV", "MP3", "M4A", "OGG", "WEBM", "MP4"].map((ext) => (
+              <Badge key={ext} variant="neutral">
+                <FileAudioIcon size={12} />
+                {ext}
+              </Badge>
+            ))}
+          </div>
+
+          {/* Upload button */}
+          <Button
+            variant="primary"
+            leftIcon={<MicrophoneIcon size={18} />}
+            disabled={isLoading}
+          >
+            {t("chooseAudioFile")}
+          </Button>
+
+          {/* Selected file info */}
+          {fileName && (
+            <div className="mt-4 flex items-center gap-2 px-4 py-2 bg-[#f0fdf4] rounded-lg border border-[#bbf7d0]">
+              <FileAudioIcon className="text-[#10b981]" size={16} />
+              <span className="text-sm font-medium text-[#166534]">{fileName}</span>
+            </div>
+          )}
+
+          {/* Hidden input */}
+          <input
+            ref={inputRef}
+            type="file"
+            accept=".wav,.mp3,.m4a,.ogg,.webm,.mp4"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) {
+                onFileSelect(file);
+                e.target.value = "";
+              }
+            }}
           />
         </div>
+      </CardBody>
 
-        {/* Title */}
-        <h3 className="text-xl font-semibold text-[#1e293b] mb-2">
-          {isDragActive ? "Drop your audio file here" : "Upload Audio Recording"}
-        </h3>
-
-        {/* Description */}
-        <p className="text-[#64748b] mb-6 text-center max-w-md">
-          Drag and drop your audio file here, or click to browse.
-          We'll transcribe and summarize it automatically.
+      {/* Max size info */}
+      <div className="px-6 py-3 bg-[#f8fafc] border-t border-[#e2e8f0] text-center">
+        <p className="text-xs text-[#94a3b8]">
+          {t("maxFileSize")}
         </p>
-
-        {/* File type badges */}
-        <div className="flex flex-wrap justify-center gap-2 mb-6">
-          {["WAV", "MP3", "M4A", "OGG", "WEBM", "MP4"].map((ext) => (
-            <Badge key={ext} variant="neutral">
-              <FileAudioIcon size={12} />
-              {ext}
-            </Badge>
-          ))}
-        </div>
-
-        {/* Upload button */}
-        <Button
-          variant="primary"
-          leftIcon={<MicrophoneIcon size={18} />}
-          disabled={isLoading}
-        >
-          Choose Audio File
-        </Button>
-
-        {/* Selected file info */}
-        {fileName && (
-          <div className="mt-4 flex items-center gap-2 px-4 py-2 bg-[#f0fdf4] rounded-lg border border-[#bbf7d0]">
-            <FileAudioIcon className="text-[#10b981]" size={16} />
-            <span className="text-sm font-medium text-[#166534]">{fileName}</span>
-          </div>
-        )}
-
-        {/* Hidden input */}
-        <input
-          ref={inputRef}
-          type="file"
-          accept=".wav,.mp3,.m4a,.ogg,.webm,.mp4"
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) {
-              onFileSelect(file);
-              e.target.value = "";
-            }
-          }}
-        />
       </div>
-    </CardBody>
-
-    {/* Max size info */}
-    <div className="px-6 py-3 bg-[#f8fafc] border-t border-[#e2e8f0] text-center">
-      <p className="text-xs text-[#94a3b8]">
-        Maximum file size: 100 MB
-      </p>
-    </div>
-  </Card>
-));
+    </Card>
+  );
+});
 
 UploadZone.displayName = 'UploadZone';
 
@@ -256,6 +264,7 @@ interface LiveRecorderProps {
 }
 
 const LiveRecorder: React.FC<LiveRecorderProps> = ({ onRecordingComplete, isProcessing }) => {
+  const { t } = useLanguage();
   const [isRecording, setIsRecording] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [duration, setDuration] = useState(0);
@@ -331,7 +340,7 @@ const LiveRecorder: React.FC<LiveRecorderProps> = ({ onRecordingComplete, isProc
 
     } catch (err) {
       console.error('Error accessing microphone:', err);
-      setError('Could not access microphone. Please check permissions.');
+      setError(String(t("microphoneError")));
     }
   };
 
@@ -429,10 +438,10 @@ const LiveRecorder: React.FC<LiveRecorderProps> = ({ onRecordingComplete, isProc
           {/* Title */}
           <h3 className="text-xl font-semibold text-[#1e293b] mb-2">
             {isRecording
-              ? isPaused ? "Recording Paused" : "Recording..."
+              ? isPaused ? t("recordingPaused") : t("recordingInProgress")
               : audioUrl
-                ? "Recording Ready"
-                : "Live Recording"
+                ? t("recordingReady")
+                : t("liveRecording")
             }
           </h3>
 
@@ -446,7 +455,7 @@ const LiveRecorder: React.FC<LiveRecorderProps> = ({ onRecordingComplete, isProc
           {/* Description */}
           {!isRecording && !audioUrl && (
             <p className="text-[#64748b] mb-6 text-center max-w-md">
-              Record audio directly from your microphone. Click the button below to start recording your consultation.
+              {t("recordFromMicrophone")}
             </p>
           )}
 
@@ -477,7 +486,7 @@ const LiveRecorder: React.FC<LiveRecorderProps> = ({ onRecordingComplete, isProc
                 onClick={startRecording}
                 leftIcon={<MicrophoneIcon size={18} />}
               >
-                Start Recording
+                {t("startRecording")}
               </Button>
             )}
 
@@ -490,7 +499,7 @@ const LiveRecorder: React.FC<LiveRecorderProps> = ({ onRecordingComplete, isProc
                     leftIcon={<MicrophoneIcon size={18} />}
                     className="bg-gradient-to-r from-[#10b981] to-[#059669]"
                   >
-                    Resume
+                    {t("resumeRecording")}
                   </Button>
                 ) : (
                   <Button
@@ -498,7 +507,7 @@ const LiveRecorder: React.FC<LiveRecorderProps> = ({ onRecordingComplete, isProc
                     onClick={pauseRecording}
                     leftIcon={<WaveformIcon size={18} />}
                   >
-                    Pause
+                    {t("pauseRecording")}
                   </Button>
                 )}
                 <Button
@@ -506,7 +515,7 @@ const LiveRecorder: React.FC<LiveRecorderProps> = ({ onRecordingComplete, isProc
                   onClick={stopRecording}
                   leftIcon={<StopIcon size={18} />}
                 >
-                  Stop
+                  {t("stopRecording")}
                 </Button>
               </>
             )}
@@ -518,21 +527,21 @@ const LiveRecorder: React.FC<LiveRecorderProps> = ({ onRecordingComplete, isProc
                   onClick={sendRecording}
                   leftIcon={<SparklesIcon size={18} />}
                 >
-                  Process Recording
+                  {t("processRecording")}
                 </Button>
                 <Button
                   variant="ghost"
                   onClick={discardRecording}
                   leftIcon={<XIcon size={18} />}
                 >
-                  Discard
+                  {t("discardRecording")}
                 </Button>
                 <Button
                   variant="secondary"
                   onClick={startRecording}
                   leftIcon={<MicrophoneIcon size={18} />}
                 >
-                  Record Again
+                  {t("recordAgain")}
                 </Button>
               </>
             )}
@@ -543,7 +552,7 @@ const LiveRecorder: React.FC<LiveRecorderProps> = ({ onRecordingComplete, isProc
       {/* Info footer */}
       <div className="px-6 py-3 bg-[#f8fafc] border-t border-[#e2e8f0] text-center">
         <p className="text-xs text-[#94a3b8]">
-          Recording is processed locally on your device
+          {t("localProcessing")}
         </p>
       </div>
     </Card>
@@ -553,39 +562,42 @@ const LiveRecorder: React.FC<LiveRecorderProps> = ({ onRecordingComplete, isProc
 // ============================================
 // PROCESSING INDICATOR COMPONENT (memoized)
 // ============================================
-const ProcessingIndicator: React.FC = React.memo(() => (
-  <Card>
-    <CardBody className="py-10">
-      <div className="flex flex-col items-center">
-        <MedicalLoader />
-        <h3 className="mt-6 text-lg font-semibold text-[#1e293b]">
-          Processing Audio
-        </h3>
-        <p className="mt-2 text-[#64748b] text-center max-w-md">
-          Transcribing your audio and generating a medical summary.
-          This may take a moment depending on the file length.
-        </p>
+const ProcessingIndicator: React.FC = React.memo(() => {
+  const { t } = useLanguage();
 
-        {/* Processing steps */}
-        <div className="mt-8 flex items-center gap-8">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#2d96c6] to-[#1e7aa8] flex items-center justify-center">
-              <WaveformIcon className="text-white" size={16} />
+  return (
+    <Card>
+      <CardBody className="py-10">
+        <div className="flex flex-col items-center">
+          <MedicalLoader />
+          <h3 className="mt-6 text-lg font-semibold text-[#1e293b]">
+            {t("processingAudioTitle")}
+          </h3>
+          <p className="mt-2 text-[#64748b] text-center max-w-md">
+            {t("processingAudioDesc")}
+          </p>
+
+          {/* Processing steps */}
+          <div className="mt-8 flex items-center gap-8">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#2d96c6] to-[#1e7aa8] flex items-center justify-center">
+                <WaveformIcon className="text-white" size={16} />
+              </div>
+              <span className="text-sm font-medium text-[#2d96c6]">{t("transcribingStep")}</span>
             </div>
-            <span className="text-sm font-medium text-[#2d96c6]">Transcribing</span>
-          </div>
-          <div className="w-8 h-0.5 bg-[#e2e8f0] rounded" />
-          <div className="flex items-center gap-2 opacity-50">
-            <div className="w-8 h-8 rounded-lg bg-[#e2e8f0] flex items-center justify-center">
-              <SparklesIcon className="text-[#94a3b8]" size={16} />
+            <div className="w-8 h-0.5 bg-[#e2e8f0] rounded" />
+            <div className="flex items-center gap-2 opacity-50">
+              <div className="w-8 h-8 rounded-lg bg-[#e2e8f0] flex items-center justify-center">
+                <SparklesIcon className="text-[#94a3b8]" size={16} />
+              </div>
+              <span className="text-sm font-medium text-[#94a3b8]">{t("summarizingStep")}</span>
             </div>
-            <span className="text-sm font-medium text-[#94a3b8]">Summarizing</span>
           </div>
         </div>
-      </div>
-    </CardBody>
-  </Card>
-));
+      </CardBody>
+    </Card>
+  );
+});
 
 ProcessingIndicator.displayName = 'ProcessingIndicator';
 
@@ -608,41 +620,45 @@ const ResultCard: React.FC<ResultCardProps> = React.memo(({
   gradientFrom,
   gradientTo,
   isPending,
-}) => (
-  <Card className="h-full flex flex-col" hover>
-    <CardHeader icon={icon}>
-      <div>
-        <h2 className="font-semibold text-[#1e293b]">{title}</h2>
-        <p className="text-xs text-[#64748b]">
-          {isPending ? "Processing..." : "Generated by AI"}
-        </p>
-      </div>
-    </CardHeader>
-    <CardBody className="flex-1">
-      {isPending ? (
-        <div className="flex items-center justify-center py-8">
-          <div className="flex flex-col items-center gap-3">
-            <div
-              className={`
-                w-10 h-10 rounded-xl bg-gradient-to-br ${gradientFrom} ${gradientTo}
-                flex items-center justify-center animate-pulse
-              `}
-            >
-              {icon}
-            </div>
-            <p className="text-sm text-[#94a3b8]">Generating...</p>
-          </div>
-        </div>
-      ) : (
-        <div className="prose prose-sm max-w-none">
-          <p className="text-[#475569] leading-relaxed whitespace-pre-wrap">
-            {content}
+}) => {
+  const { t } = useLanguage();
+
+  return (
+    <Card className="h-full flex flex-col" hover>
+      <CardHeader icon={icon}>
+        <div>
+          <h2 className="font-semibold text-[#1e293b]">{title}</h2>
+          <p className="text-xs text-[#64748b]">
+            {isPending ? t("processing") : t("generatedByAI")}
           </p>
         </div>
-      )}
-    </CardBody>
-  </Card>
-));
+      </CardHeader>
+      <CardBody className="flex-1">
+        {isPending ? (
+          <div className="flex items-center justify-center py-8">
+            <div className="flex flex-col items-center gap-3">
+              <div
+                className={`
+                  w-10 h-10 rounded-xl bg-gradient-to-br ${gradientFrom} ${gradientTo}
+                  flex items-center justify-center animate-pulse
+                `}
+              >
+                {icon}
+              </div>
+              <p className="text-sm text-[#94a3b8]">{t("generating")}</p>
+            </div>
+          </div>
+        ) : (
+          <div className="prose prose-sm max-w-none">
+            <p className="text-[#475569] leading-relaxed whitespace-pre-wrap">
+              {content}
+            </p>
+          </div>
+        )}
+      </CardBody>
+    </Card>
+  );
+});
 
 ResultCard.displayName = 'ResultCard';
 
@@ -650,6 +666,7 @@ ResultCard.displayName = 'ResultCard';
 // MAIN DASHBOARD COMPONENT
 // ============================================
 export default function MainDashboard() {
+  const { t } = useLanguage();
   const [fileName, setFileName] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -829,7 +846,7 @@ ${getDocumentFooter()}`;
                   className="shadow-lg"
                 >
                   <div>
-                    <p className="font-semibold">Processing Error</p>
+                    <p className="font-semibold">{t("processingError")}</p>
                     <p className="mt-1 text-sm opacity-90">{error}</p>
                   </div>
                 </Alert>
@@ -850,8 +867,8 @@ ${getDocumentFooter()}`;
                   <CardHeader icon={<SparklesIcon className="text-white" size={20} />}>
                     <div className="flex items-center gap-3">
                       <div>
-                        <h2 className="font-semibold text-[#1e293b]">Generating SmartNote</h2>
-                        <p className="text-xs text-[#64748b]">AI is writing...</p>
+                        <h2 className="font-semibold text-[#1e293b]">{t("generatingSmartNote")}</h2>
+                        <p className="text-xs text-[#64748b]">{t("aiWriting")}</p>
                       </div>
                       <div className="flex gap-1">
                         {[0, 1, 2].map((i) => (
@@ -882,8 +899,8 @@ ${getDocumentFooter()}`;
                 <Card className="overflow-hidden">
                   <CardHeader icon={<DocumentIcon className="text-white" size={20} />}>
                     <div>
-                      <h2 className="font-semibold text-[#1e293b]">Document Généré</h2>
-                      <p className="text-xs text-[#64748b]">Modifiable avant export</p>
+                      <h2 className="font-semibold text-[#1e293b]">{t("generatedDocument")}</h2>
+                      <p className="text-xs text-[#64748b]">{t("editableBeforeExport")}</p>
                     </div>
                   </CardHeader>
                   <CardBody>
@@ -891,7 +908,7 @@ ${getDocumentFooter()}`;
                       value={document}
                       onChange={(e) => setDocument(e.target.value)}
                       className="w-full h-96 p-4 border-2 border-[#e2e8f0] rounded-xl bg-white text-[#1e293b] font-mono text-sm leading-relaxed resize-y focus:border-[#2d96c6] focus:ring-2 focus:ring-[#2d96c6]/20 outline-none"
-                      placeholder="Document généré..."
+                      placeholder={String(t("documentPlaceholder"))}
                     />
                   </CardBody>
                 </Card>
@@ -903,7 +920,7 @@ ${getDocumentFooter()}`;
                     onClick={handleExportPDF}
                     leftIcon={<DownloadIcon size={18} />}
                   >
-                    Exporter en PDF
+                    {t("exportPDF")}
                   </Button>
                   <Button
                     variant="secondary"
@@ -913,14 +930,14 @@ ${getDocumentFooter()}`;
                       }
                     }}
                   >
-                    Copier le document
+                    {t("copyDocument")}
                   </Button>
                   <Button
                     variant="ghost"
                     onClick={() => inputRef.current?.click()}
                     leftIcon={<MicrophoneIcon size={18} />}
                   >
-                    Nouvel enregistrement
+                    {t("newRecording")}
                   </Button>
                 </div>
               </section>
@@ -934,21 +951,21 @@ ${getDocumentFooter()}`;
                     <div className="w-8 h-8 rounded-lg bg-[#f1f5f9] flex items-center justify-center">
                       <span className="text-sm font-bold">1</span>
                     </div>
-                    <span className="text-sm">Télécharger audio</span>
+                    <span className="text-sm">{t("step1Upload")}</span>
                   </div>
                   <div className="w-8 h-0.5 bg-[#e2e8f0] self-center rounded" />
                   <div className="flex items-center gap-2 text-[#94a3b8]">
                     <div className="w-8 h-8 rounded-lg bg-[#f1f5f9] flex items-center justify-center">
                       <span className="text-sm font-bold">2</span>
                     </div>
-                    <span className="text-sm">Transcription IA</span>
+                    <span className="text-sm">{t("step2Transcription")}</span>
                   </div>
                   <div className="w-8 h-0.5 bg-[#e2e8f0] self-center rounded" />
                   <div className="flex items-center gap-2 text-[#94a3b8]">
                     <div className="w-8 h-8 rounded-lg bg-[#f1f5f9] flex items-center justify-center">
                       <span className="text-sm font-bold">3</span>
                     </div>
-                    <span className="text-sm">Document généré</span>
+                    <span className="text-sm">{t("step3Document")}</span>
                   </div>
                 </div>
               </section>
@@ -963,14 +980,14 @@ ${getDocumentFooter()}`;
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-[#94a3b8]">
             <div className="flex items-center gap-2">
               <ToothIcon size={16} />
-              <span>Dental Assistant v1.0</span>
+              <span>{t("appName")} v1.0</span>
             </div>
             <div className="flex items-center gap-4">
               <span className="flex items-center gap-1">
                 <span className="w-2 h-2 rounded-full bg-[#10b981] animate-pulse" />
-                AI Engine Active
+                {t("aiEngineActive")}
               </span>
-              <span>100% Local Processing</span>
+              <span>{t("localProcessingFooter")}</span>
             </div>
           </div>
         </Container>
