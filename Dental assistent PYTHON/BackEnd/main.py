@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 import shutil
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -14,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from app.config import MODEL_CONFIGS, ALTERNATIVE_MODELS, get_llm_model_path, analyze_hardware, get_hardware_info, get_model_recommendations
+from app.config import MODEL_CONFIGS, ALTERNATIVE_MODELS, get_llm_model_path, analyze_hardware, get_hardware_info
 from app.middleware import MaxRequestSizeMiddleware, SimpleRateLimitMiddleware
 from app.security import verify_api_key, check_api_key_configured, validate_security_config
 from app.llm_config import SMARTNOTE_PROMPT_OPTIMIZED
@@ -58,7 +59,12 @@ app.include_router(transcribe_router)
 # --- Middlewares ---
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "tauri://localhost"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:1420",
+        "tauri://localhost",
+        "https://tauri.localhost",
+    ],
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["X-API-Key", "Content-Type"],
@@ -70,8 +76,6 @@ app.add_middleware(SimpleRateLimitMiddleware)
 
 
 # --- Input Sanitization ---
-import re
-
 def sanitize_input(text: str, max_length: int = 50000) -> str:
     """
     Sanitize user input before LLM processing.

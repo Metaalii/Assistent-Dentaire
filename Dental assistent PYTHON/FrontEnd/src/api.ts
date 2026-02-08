@@ -46,9 +46,12 @@ export interface HardwareInfo {
   download_url?: string;
 }
 
-export async function transcribeAudio(file: File): Promise<TranscribeResponse> {
+export async function transcribeAudio(file: File, language?: string): Promise<TranscribeResponse> {
   const form = new FormData();
   form.append("file", file);
+  if (language) {
+    form.append("language", language);
+  }
 
   const res = await fetch(`${BASE_URL}/transcribe`, {
     method: "POST",

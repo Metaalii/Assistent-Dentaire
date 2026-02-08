@@ -5,7 +5,7 @@ import uuid
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 
@@ -70,13 +70,18 @@ def _copy_with_limit(src, dst, max_bytes: int) -> int:
 async def transcribe_audio(
     request: Request,
     file: UploadFile = File(...),
+    language: Optional[str] = Form(None),
 ):
     """
-    MVP rules:
+    Transcribe an audio file to text.
     - Validate extension
     - Stream to a secure temp file (bounded by MAX_UPLOAD_BYTES)
     - Transcribe via LocalWhisper (runs in background thread)
     - Always cleanup temp file
+
+    Args:
+        file: Audio file upload
+        language: Optional language hint ("fr", "en"). Defaults to "fr".
     """
     request_id = uuid.uuid4().hex
     ext = _validate_upload(file)
@@ -84,7 +89,7 @@ async def transcribe_audio(
     tmp_path: Optional[str] = None
 
     try:
-        # 1) Write to a temp file with size cap (don’t trust Content-Length)
+        # 1) Write to a temp file with size cap (don't trust Content-Length)
         with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
             tmp_path = tmp.name
 
@@ -92,13 +97,13 @@ async def transcribe_audio(
             # Copy it off the event loop.
             await run_in_threadpool(_copy_with_limit, file.file, tmp, MAX_UPLOAD_BYTES)
 
-        # 2) If the client disconnected, don’t waste time transcribing
+        # 2) If the client disconnected, don't waste time transcribing
         if await request.is_disconnected():
             raise HTTPException(status_code=499, detail="Client closed request")
 
-        # 3) Transcribe (LocalWhisper already offloads work to a thread) :contentReference[oaicite:3]{index=3}
+        # 3) Transcribe with language hint
         whisper = get_whisper()
-        text = await whisper.transcribe(tmp_path)
+        text = await whisper.transcribe(tmp_path, language=language)
 
         return {"text": text, "request_id": request_id}
 

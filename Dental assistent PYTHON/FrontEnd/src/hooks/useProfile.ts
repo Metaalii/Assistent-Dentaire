@@ -48,22 +48,25 @@ export function useProfile() {
     return profile !== null && profile.name.trim() !== "";
   };
 
-  const getDocumentHeader = (): string => {
+  const getDocumentHeader = (lang: string = "fr"): string => {
     if (!profile) return "";
 
+    const phoneLabel = lang === "fr" ? "Tél." : "Tel.";
     return `${profile.name}
 ${profile.title}
 ${profile.address}
-Tél. : ${profile.phone}
+${phoneLabel} : ${profile.phone}
 ${profile.email}
 
 ────────────────────────────────────────`;
   };
 
-  const getDocumentFooter = (): string => {
+  const getDocumentFooter = (lang: string = "fr"): string => {
+    const disclaimer = lang === "fr"
+      ? "Document généré par assistance IA.\nÀ vérifier et valider avant archivage ou transmission."
+      : "Document generated with AI assistance.\nPlease verify and validate before archiving or transmission.";
     return `────────────────────────────────────────
-Document généré par assistance IA.
-À vérifier et valider avant archivage ou transmission.`;
+${disclaimer}`;
   };
 
   return {
