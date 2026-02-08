@@ -150,6 +150,22 @@ export const translations = {
     email: "Email",
     emailPlaceholder: "contact@dental-office.com",
     profileInfoText: "This information will be used to generate the header of your documents",
+
+    // PDF Export
+    pdfTitle: "Medical Consultation Note",
+    pdfDate: "Date",
+    pdfPractitioner: "Practitioner",
+    pdfContact: "Contact",
+    pdfConsultationNotes: "Consultation Notes",
+    pdfDisclaimer: "This document was generated with AI assistance. Please verify and validate before archiving or transmission.",
+    pdfConfidential: "CONFIDENTIAL - MEDICAL DOCUMENT",
+    pdfPage: "Page",
+
+    // Dark Mode
+    darkMode: "Dark Mode",
+    lightMode: "Light Mode",
+    theme: "Theme",
+    systemTheme: "System",
   },
 
   fr: {
@@ -301,6 +317,22 @@ export const translations = {
     email: "Email",
     emailPlaceholder: "contact@cabinet-dentaire.fr",
     profileInfoText: "Ces informations seront utilisées pour générer l'en-tête de vos documents",
+
+    // PDF Export
+    pdfTitle: "Note de Consultation Médicale",
+    pdfDate: "Date",
+    pdfPractitioner: "Praticien",
+    pdfContact: "Contact",
+    pdfConsultationNotes: "Notes de Consultation",
+    pdfDisclaimer: "Ce document a été généré avec l'assistance de l'IA. Veuillez vérifier et valider avant archivage ou transmission.",
+    pdfConfidential: "CONFIDENTIEL - DOCUMENT MÉDICAL",
+    pdfPage: "Page",
+
+    // Dark Mode
+    darkMode: "Mode Sombre",
+    lightMode: "Mode Clair",
+    theme: "Thème",
+    systemTheme: "Système",
   },
 } as const;
 

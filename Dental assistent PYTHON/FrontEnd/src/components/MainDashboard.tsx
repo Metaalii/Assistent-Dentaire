@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { summarizeTextStream, transcribeAudio } from "../api";
 import { useProfile } from "../hooks/useProfile";
-import { useLanguage } from "../i18n";
+import { useLanguage, useTheme } from "../i18n";
 import {
   Button,
   Card,
@@ -24,6 +24,8 @@ import {
   HeartPulseIcon,
   StopIcon,
   DownloadIcon,
+  SunIcon,
+  MoonIcon,
 } from "./ui/Icons";
 
 const ALLOWED_EXTS = new Set(["wav", "mp3", "m4a", "ogg", "webm", "mp4"]);
@@ -41,9 +43,10 @@ const Header: React.FC<{ onClear: () => void; hasContent: boolean }> = React.mem
   hasContent,
 }) => {
   const { t } = useLanguage();
+  const { resolvedTheme, toggleTheme } = useTheme();
 
   return (
-    <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-[#e2e8f0] shadow-sm">
+    <header className="sticky top-0 z-50 bg-white/80 dark:bg-[#1e293b]/80 backdrop-blur-xl border-b border-[#e2e8f0] dark:border-[#334155] shadow-sm">
       <Container>
         <div className="flex items-center justify-between py-4">
           {/* Logo and title */}
@@ -52,13 +55,13 @@ const Header: React.FC<{ onClear: () => void; hasContent: boolean }> = React.mem
               <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#2d96c6] to-[#28b5ad] shadow-lg shadow-[#2d96c6]/30 flex items-center justify-center">
                 <ToothIcon className="text-white" size={24} />
               </div>
-              <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-white shadow-md flex items-center justify-center">
+              <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-white dark:bg-[#1e293b] shadow-md flex items-center justify-center">
                 <HeartPulseIcon className="text-[#28b5ad]" size={12} />
               </div>
             </div>
             <div>
-              <h1 className="text-xl font-bold text-[#1e293b]">{t("appName")}</h1>
-              <p className="text-sm text-[#64748b]">{t("aiPoweredDocumentation")}</p>
+              <h1 className="text-xl font-bold text-[#1e293b] dark:text-white">{t("appName")}</h1>
+              <p className="text-sm text-[#64748b] dark:text-[#94a3b8]">{t("aiPoweredDocumentation")}</p>
             </div>
           </div>
 
@@ -68,6 +71,14 @@ const Header: React.FC<{ onClear: () => void; hasContent: boolean }> = React.mem
               <span className="w-2 h-2 rounded-full bg-[#10b981] animate-pulse" />
               {t("online")}
             </Badge>
+            {/* Theme toggle button */}
+            <button
+              onClick={toggleTheme}
+              className="p-2 rounded-lg bg-[#f1f5f9] dark:bg-[#334155] text-[#64748b] dark:text-[#94a3b8] hover:bg-[#e2e8f0] dark:hover:bg-[#475569] transition-colors"
+              title={resolvedTheme === "dark" ? String(t("lightMode")) : String(t("darkMode"))}
+            >
+              {resolvedTheme === "dark" ? <SunIcon size={18} /> : <MoonIcon size={18} />}
+            </button>
             {hasContent && (
               <Button
                 variant="ghost"
@@ -666,7 +677,7 @@ ResultCard.displayName = 'ResultCard';
 // MAIN DASHBOARD COMPONENT
 // ============================================
 export default function MainDashboard() {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [fileName, setFileName] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -676,7 +687,7 @@ export default function MainDashboard() {
   const [streamingContent, setStreamingContent] = useState<string>("");
   const [isDragActive, setIsDragActive] = useState(false);
 
-  const { getDocumentHeader, getDocumentFooter } = useProfile();
+  const { profile, getDocumentHeader, getDocumentFooter } = useProfile();
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const processFile = useCallback(async (file: File) => {
@@ -753,36 +764,246 @@ ${getDocumentFooter()}`;
     };
 
     const sanitizedContent = escapeHtml(document).replace(/\n/g, '<br>');
+    const currentDate = new Date().toLocaleDateString(language === 'fr' ? 'fr-FR' : 'en-GB', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
 
-    // Create a printable window
+    // Create a printable window with professional layout
     const printWindow = window.open('', '_blank');
     if (printWindow) {
       printWindow.document.write(`
         <!DOCTYPE html>
         <html>
         <head>
-          <title>Document Dentaire</title>
+          <title>${String(t("pdfTitle"))} - ${currentDate}</title>
           <meta charset="UTF-8">
           <style>
+            * {
+              margin: 0;
+              padding: 0;
+              box-sizing: border-box;
+            }
+
             body {
               font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-              padding: 40px;
+              line-height: 1.6;
+              color: #1e293b;
+              background: #fff;
+            }
+
+            .page {
               max-width: 800px;
               margin: 0 auto;
-              line-height: 1.6;
+              padding: 40px;
             }
+
+            /* Header */
+            .header {
+              display: flex;
+              justify-content: space-between;
+              align-items: flex-start;
+              padding-bottom: 20px;
+              border-bottom: 3px solid #2d96c6;
+              margin-bottom: 30px;
+            }
+
+            .logo-section {
+              display: flex;
+              align-items: center;
+              gap: 15px;
+            }
+
+            .logo {
+              width: 60px;
+              height: 60px;
+              background: linear-gradient(135deg, #2d96c6, #28b5ad);
+              border-radius: 12px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              color: white;
+              font-size: 28px;
+              font-weight: bold;
+            }
+
+            .practice-info h1 {
+              font-size: 22px;
+              font-weight: 700;
+              color: #1e293b;
+              margin-bottom: 4px;
+            }
+
+            .practice-info .title {
+              font-size: 14px;
+              color: #2d96c6;
+              font-weight: 500;
+            }
+
+            .contact-info {
+              text-align: right;
+              font-size: 13px;
+              color: #64748b;
+            }
+
+            .contact-info p {
+              margin-bottom: 3px;
+            }
+
+            /* Document Title */
+            .document-title {
+              background: linear-gradient(135deg, #f0f7fc, #effcfb);
+              border-radius: 12px;
+              padding: 20px;
+              margin-bottom: 25px;
+              text-align: center;
+            }
+
+            .document-title h2 {
+              font-size: 20px;
+              color: #2d96c6;
+              margin-bottom: 8px;
+            }
+
+            .document-title .date {
+              font-size: 14px;
+              color: #64748b;
+            }
+
+            /* Content */
+            .content-section {
+              margin-bottom: 30px;
+            }
+
+            .section-header {
+              display: flex;
+              align-items: center;
+              gap: 10px;
+              margin-bottom: 15px;
+              padding-bottom: 10px;
+              border-bottom: 2px solid #e2e8f0;
+            }
+
+            .section-icon {
+              width: 32px;
+              height: 32px;
+              background: linear-gradient(135deg, #2d96c6, #28b5ad);
+              border-radius: 8px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              color: white;
+              font-size: 16px;
+            }
+
+            .section-header h3 {
+              font-size: 16px;
+              font-weight: 600;
+              color: #1e293b;
+            }
+
+            .content-box {
+              background: #f8fafc;
+              border: 1px solid #e2e8f0;
+              border-radius: 10px;
+              padding: 20px;
+              font-size: 14px;
+              line-height: 1.8;
+            }
+
+            /* Footer */
+            .footer {
+              margin-top: 40px;
+              padding-top: 20px;
+              border-top: 2px solid #e2e8f0;
+            }
+
+            .disclaimer {
+              background: #fef3c7;
+              border: 1px solid #fbbf24;
+              border-radius: 8px;
+              padding: 12px 16px;
+              font-size: 12px;
+              color: #92400e;
+              margin-bottom: 20px;
+            }
+
+            .confidential {
+              text-align: center;
+              font-size: 11px;
+              color: #94a3b8;
+              text-transform: uppercase;
+              letter-spacing: 2px;
+            }
+
             @media print {
-              body { padding: 20px; }
+              body {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+              }
+              .page {
+                padding: 20px;
+                max-width: 100%;
+              }
+              .logo {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+              }
             }
           </style>
         </head>
-        <body>${sanitizedContent}</body>
+        <body>
+          <div class="page">
+            <!-- Header -->
+            <div class="header">
+              <div class="logo-section">
+                <div class="logo">🦷</div>
+                <div class="practice-info">
+                  <h1>${profile?.name || 'Cabinet Dentaire'}</h1>
+                  <p class="title">${profile?.title || String(t("professionalTitlePlaceholder"))}</p>
+                </div>
+              </div>
+              <div class="contact-info">
+                ${profile?.address ? `<p>${escapeHtml(profile.address)}</p>` : ''}
+                ${profile?.phone ? `<p>📞 ${escapeHtml(profile.phone)}</p>` : ''}
+                ${profile?.email ? `<p>✉️ ${escapeHtml(profile.email)}</p>` : ''}
+              </div>
+            </div>
+
+            <!-- Document Title -->
+            <div class="document-title">
+              <h2>${String(t("pdfTitle"))}</h2>
+              <p class="date">${String(t("pdfDate"))}: ${currentDate}</p>
+            </div>
+
+            <!-- Content -->
+            <div class="content-section">
+              <div class="section-header">
+                <div class="section-icon">📋</div>
+                <h3>${String(t("pdfConsultationNotes"))}</h3>
+              </div>
+              <div class="content-box">
+                ${sanitizedContent}
+              </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="footer">
+              <div class="disclaimer">
+                ⚠️ ${String(t("pdfDisclaimer"))}
+              </div>
+              <p class="confidential">${String(t("pdfConfidential"))}</p>
+            </div>
+          </div>
+        </body>
         </html>
       `);
       printWindow.document.close();
       printWindow.print();
     }
-  }, [document]);
+  }, [document, profile, t, language]);
 
   const onDrop = useCallback((evt: React.DragEvent<HTMLDivElement>) => {
     evt.preventDefault();
@@ -811,7 +1032,7 @@ ${getDocumentFooter()}`;
   const hasContent = !!(transcript || document || error || isStreaming);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#f8fafc] via-[#f0f7fc] to-[#f8fafc]">
+    <div className="min-h-screen bg-gradient-to-br from-[#f8fafc] via-[#f0f7fc] to-[#f8fafc] dark:from-[#0f172a] dark:via-[#1e293b] dark:to-[#0f172a]">
       {/* Header */}
       <Header onClear={clearAll} hasContent={hasContent} />
 
@@ -975,7 +1196,7 @@ ${getDocumentFooter()}`;
       </main>
 
       {/* Footer */}
-      <footer className="py-6 border-t border-[#e2e8f0] bg-white/50 backdrop-blur-sm">
+      <footer className="py-6 border-t border-[#e2e8f0] dark:border-[#334155] bg-white/50 dark:bg-[#1e293b]/50 backdrop-blur-sm">
         <Container>
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-[#94a3b8]">
             <div className="flex items-center gap-2">
