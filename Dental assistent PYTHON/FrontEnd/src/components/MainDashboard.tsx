@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { summarizeTextStream, transcribeAudio } from "../api";
 import { useProfile } from "../hooks/useProfile";
+import { useLanguage, useTheme } from "../i18n";
 import {
   Button,
   Card,
@@ -23,6 +24,8 @@ import {
   HeartPulseIcon,
   StopIcon,
   DownloadIcon,
+  SunIcon,
+  MoonIcon,
 } from "./ui/Icons";
 
 const ALLOWED_EXTS = new Set(["wav", "mp3", "m4a", "ogg", "webm", "mp4"]);
@@ -38,47 +41,60 @@ function getExt(name: string) {
 const Header: React.FC<{ onClear: () => void; hasContent: boolean }> = React.memo(({
   onClear,
   hasContent,
-}) => (
-  <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-[#e2e8f0] shadow-sm">
-    <Container>
-      <div className="flex items-center justify-between py-4">
-        {/* Logo and title */}
-        <div className="flex items-center gap-4">
-          <div className="relative">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#2d96c6] to-[#28b5ad] shadow-lg shadow-[#2d96c6]/30 flex items-center justify-center">
-              <ToothIcon className="text-white" size={24} />
-            </div>
-            <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-white shadow-md flex items-center justify-center">
-              <HeartPulseIcon className="text-[#28b5ad]" size={12} />
-            </div>
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-[#1e293b]">Dental Assistant</h1>
-            <p className="text-sm text-[#64748b]">AI-Powered Documentation</p>
-          </div>
-        </div>
+}) => {
+  const { t } = useLanguage();
+  const { resolvedTheme, toggleTheme } = useTheme();
 
-        {/* Actions */}
-        <div className="flex items-center gap-3">
-          <Badge variant="success">
-            <span className="w-2 h-2 rounded-full bg-[#10b981] animate-pulse" />
-            Online
-          </Badge>
-          {hasContent && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onClear}
-              leftIcon={<XIcon size={16} />}
+  return (
+    <header className="sticky top-0 z-50 bg-white/80 dark:bg-[#1e293b]/80 backdrop-blur-xl border-b border-[#e2e8f0] dark:border-[#334155] shadow-sm">
+      <Container>
+        <div className="flex items-center justify-between py-4">
+          {/* Logo and title */}
+          <div className="flex items-center gap-4">
+            <div className="relative">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#2d96c6] to-[#28b5ad] shadow-lg shadow-[#2d96c6]/30 flex items-center justify-center">
+                <ToothIcon className="text-white" size={24} />
+              </div>
+              <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-white dark:bg-[#1e293b] shadow-md flex items-center justify-center">
+                <HeartPulseIcon className="text-[#28b5ad]" size={12} />
+              </div>
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-[#1e293b] dark:text-white">{t("appName")}</h1>
+              <p className="text-sm text-[#64748b] dark:text-[#94a3b8]">{t("aiPoweredDocumentation")}</p>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center gap-3">
+            <Badge variant="success">
+              <span className="w-2 h-2 rounded-full bg-[#10b981] animate-pulse" />
+              {t("online")}
+            </Badge>
+            {/* Theme toggle button */}
+            <button
+              onClick={toggleTheme}
+              className="p-2 rounded-lg bg-[#f1f5f9] dark:bg-[#334155] text-[#64748b] dark:text-[#94a3b8] hover:bg-[#e2e8f0] dark:hover:bg-[#475569] transition-colors"
+              title={resolvedTheme === "dark" ? String(t("lightMode")) : String(t("darkMode"))}
             >
-              Clear
-            </Button>
-          )}
+              {resolvedTheme === "dark" ? <SunIcon size={18} /> : <MoonIcon size={18} />}
+            </button>
+            {hasContent && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onClear}
+                leftIcon={<XIcon size={16} />}
+              >
+                {t("clear")}
+              </Button>
+            )}
+          </div>
         </div>
-      </div>
-    </Container>
-  </header>
-));
+      </Container>
+    </header>
+  );
+});
 
 Header.displayName = 'Header';
 
@@ -105,116 +121,119 @@ const UploadZone: React.FC<UploadZoneProps> = React.memo(({
   onDragLeave,
   onDrop,
   inputRef,
-}) => (
-  <Card
-    className={`
-      relative overflow-hidden transition-all duration-300
-      ${isDragActive ? "ring-4 ring-[#2d96c6]/30 border-[#2d96c6]" : ""}
-      ${isLoading ? "opacity-50 pointer-events-none" : ""}
-    `}
-    hover={!isLoading}
-  >
-    {/* Gradient background pattern */}
-    <div className="absolute inset-0 bg-gradient-to-br from-[#f0f7fc]/50 via-white to-[#effcfb]/50 pointer-events-none" />
+}) => {
+  const { t } = useLanguage();
 
-    {/* Decorative circles */}
-    <div className="absolute -top-20 -right-20 w-40 h-40 bg-gradient-to-br from-[#2d96c6]/10 to-transparent rounded-full blur-2xl pointer-events-none" />
-    <div className="absolute -bottom-20 -left-20 w-40 h-40 bg-gradient-to-tr from-[#28b5ad]/10 to-transparent rounded-full blur-2xl pointer-events-none" />
+  return (
+    <Card
+      className={`
+        relative overflow-hidden transition-all duration-300
+        ${isDragActive ? "ring-4 ring-[#2d96c6]/30 border-[#2d96c6]" : ""}
+        ${isLoading ? "opacity-50 pointer-events-none" : ""}
+      `}
+      hover={!isLoading}
+    >
+      {/* Gradient background pattern */}
+      <div className="absolute inset-0 bg-gradient-to-br from-[#f0f7fc]/50 via-white to-[#effcfb]/50 pointer-events-none" />
 
-    <CardBody className="relative">
-      <div
-        className="flex flex-col items-center justify-center py-12 cursor-pointer"
-        onClick={() => inputRef.current?.click()}
-        onDrop={onDrop}
-        onDragOver={onDragOver}
-        onDragLeave={onDragLeave}
-        role="button"
-        tabIndex={0}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") inputRef.current?.click();
-        }}
-      >
-        {/* Upload icon */}
+      {/* Decorative circles */}
+      <div className="absolute -top-20 -right-20 w-40 h-40 bg-gradient-to-br from-[#2d96c6]/10 to-transparent rounded-full blur-2xl pointer-events-none" />
+      <div className="absolute -bottom-20 -left-20 w-40 h-40 bg-gradient-to-tr from-[#28b5ad]/10 to-transparent rounded-full blur-2xl pointer-events-none" />
+
+      <CardBody className="relative">
         <div
-          className={`
-            w-20 h-20 rounded-2xl flex items-center justify-center mb-6
-            transition-all duration-300
-            ${
-              isDragActive
-                ? "bg-gradient-to-br from-[#2d96c6] to-[#28b5ad] scale-110"
-                : "bg-gradient-to-br from-[#f0f7fc] to-[#effcfb]"
-            }
-          `}
+          className="flex flex-col items-center justify-center py-12 cursor-pointer"
+          onClick={() => inputRef.current?.click()}
+          onDrop={onDrop}
+          onDragOver={onDragOver}
+          onDragLeave={onDragLeave}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") inputRef.current?.click();
+          }}
         >
-          <UploadCloudIcon
-            className={isDragActive ? "text-white" : "text-[#2d96c6]"}
-            size={40}
+          {/* Upload icon */}
+          <div
+            className={`
+              w-20 h-20 rounded-2xl flex items-center justify-center mb-6
+              transition-all duration-300
+              ${
+                isDragActive
+                  ? "bg-gradient-to-br from-[#2d96c6] to-[#28b5ad] scale-110"
+                  : "bg-gradient-to-br from-[#f0f7fc] to-[#effcfb]"
+              }
+            `}
+          >
+            <UploadCloudIcon
+              className={isDragActive ? "text-white" : "text-[#2d96c6]"}
+              size={40}
+            />
+          </div>
+
+          {/* Title */}
+          <h3 className="text-xl font-semibold text-[#1e293b] mb-2">
+            {isDragActive ? t("dropAudioHere") : t("uploadAudioRecording")}
+          </h3>
+
+          {/* Description */}
+          <p className="text-[#64748b] mb-6 text-center max-w-md">
+            {t("dragAndDropAudio")}
+          </p>
+
+          {/* File type badges */}
+          <div className="flex flex-wrap justify-center gap-2 mb-6">
+            {["WAV", "MP3", "M4A", "OGG", "WEBM", "MP4"].map((ext) => (
+              <Badge key={ext} variant="neutral">
+                <FileAudioIcon size={12} />
+                {ext}
+              </Badge>
+            ))}
+          </div>
+
+          {/* Upload button */}
+          <Button
+            variant="primary"
+            leftIcon={<MicrophoneIcon size={18} />}
+            disabled={isLoading}
+          >
+            {t("chooseAudioFile")}
+          </Button>
+
+          {/* Selected file info */}
+          {fileName && (
+            <div className="mt-4 flex items-center gap-2 px-4 py-2 bg-[#f0fdf4] rounded-lg border border-[#bbf7d0]">
+              <FileAudioIcon className="text-[#10b981]" size={16} />
+              <span className="text-sm font-medium text-[#166534]">{fileName}</span>
+            </div>
+          )}
+
+          {/* Hidden input */}
+          <input
+            ref={inputRef}
+            type="file"
+            accept=".wav,.mp3,.m4a,.ogg,.webm,.mp4"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) {
+                onFileSelect(file);
+                e.target.value = "";
+              }
+            }}
           />
         </div>
+      </CardBody>
 
-        {/* Title */}
-        <h3 className="text-xl font-semibold text-[#1e293b] mb-2">
-          {isDragActive ? "Drop your audio file here" : "Upload Audio Recording"}
-        </h3>
-
-        {/* Description */}
-        <p className="text-[#64748b] mb-6 text-center max-w-md">
-          Drag and drop your audio file here, or click to browse.
-          We'll transcribe and summarize it automatically.
+      {/* Max size info */}
+      <div className="px-6 py-3 bg-[#f8fafc] border-t border-[#e2e8f0] text-center">
+        <p className="text-xs text-[#94a3b8]">
+          {t("maxFileSize")}
         </p>
-
-        {/* File type badges */}
-        <div className="flex flex-wrap justify-center gap-2 mb-6">
-          {["WAV", "MP3", "M4A", "OGG", "WEBM", "MP4"].map((ext) => (
-            <Badge key={ext} variant="neutral">
-              <FileAudioIcon size={12} />
-              {ext}
-            </Badge>
-          ))}
-        </div>
-
-        {/* Upload button */}
-        <Button
-          variant="primary"
-          leftIcon={<MicrophoneIcon size={18} />}
-          disabled={isLoading}
-        >
-          Choose Audio File
-        </Button>
-
-        {/* Selected file info */}
-        {fileName && (
-          <div className="mt-4 flex items-center gap-2 px-4 py-2 bg-[#f0fdf4] rounded-lg border border-[#bbf7d0]">
-            <FileAudioIcon className="text-[#10b981]" size={16} />
-            <span className="text-sm font-medium text-[#166534]">{fileName}</span>
-          </div>
-        )}
-
-        {/* Hidden input */}
-        <input
-          ref={inputRef}
-          type="file"
-          accept=".wav,.mp3,.m4a,.ogg,.webm,.mp4"
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) {
-              onFileSelect(file);
-              e.target.value = "";
-            }
-          }}
-        />
       </div>
-    </CardBody>
-
-    {/* Max size info */}
-    <div className="px-6 py-3 bg-[#f8fafc] border-t border-[#e2e8f0] text-center">
-      <p className="text-xs text-[#94a3b8]">
-        Maximum file size: 100 MB
-      </p>
-    </div>
-  </Card>
-));
+    </Card>
+  );
+});
 
 UploadZone.displayName = 'UploadZone';
 
@@ -256,6 +275,7 @@ interface LiveRecorderProps {
 }
 
 const LiveRecorder: React.FC<LiveRecorderProps> = ({ onRecordingComplete, isProcessing }) => {
+  const { t } = useLanguage();
   const [isRecording, setIsRecording] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [duration, setDuration] = useState(0);
@@ -331,7 +351,7 @@ const LiveRecorder: React.FC<LiveRecorderProps> = ({ onRecordingComplete, isProc
 
     } catch (err) {
       console.error('Error accessing microphone:', err);
-      setError('Could not access microphone. Please check permissions.');
+      setError(String(t("microphoneError")));
     }
   };
 
@@ -429,10 +449,10 @@ const LiveRecorder: React.FC<LiveRecorderProps> = ({ onRecordingComplete, isProc
           {/* Title */}
           <h3 className="text-xl font-semibold text-[#1e293b] mb-2">
             {isRecording
-              ? isPaused ? "Recording Paused" : "Recording..."
+              ? isPaused ? t("recordingPaused") : t("recordingInProgress")
               : audioUrl
-                ? "Recording Ready"
-                : "Live Recording"
+                ? t("recordingReady")
+                : t("liveRecording")
             }
           </h3>
 
@@ -446,7 +466,7 @@ const LiveRecorder: React.FC<LiveRecorderProps> = ({ onRecordingComplete, isProc
           {/* Description */}
           {!isRecording && !audioUrl && (
             <p className="text-[#64748b] mb-6 text-center max-w-md">
-              Record audio directly from your microphone. Click the button below to start recording your consultation.
+              {t("recordFromMicrophone")}
             </p>
           )}
 
@@ -477,7 +497,7 @@ const LiveRecorder: React.FC<LiveRecorderProps> = ({ onRecordingComplete, isProc
                 onClick={startRecording}
                 leftIcon={<MicrophoneIcon size={18} />}
               >
-                Start Recording
+                {t("startRecording")}
               </Button>
             )}
 
@@ -490,7 +510,7 @@ const LiveRecorder: React.FC<LiveRecorderProps> = ({ onRecordingComplete, isProc
                     leftIcon={<MicrophoneIcon size={18} />}
                     className="bg-gradient-to-r from-[#10b981] to-[#059669]"
                   >
-                    Resume
+                    {t("resumeRecording")}
                   </Button>
                 ) : (
                   <Button
@@ -498,7 +518,7 @@ const LiveRecorder: React.FC<LiveRecorderProps> = ({ onRecordingComplete, isProc
                     onClick={pauseRecording}
                     leftIcon={<WaveformIcon size={18} />}
                   >
-                    Pause
+                    {t("pauseRecording")}
                   </Button>
                 )}
                 <Button
@@ -506,7 +526,7 @@ const LiveRecorder: React.FC<LiveRecorderProps> = ({ onRecordingComplete, isProc
                   onClick={stopRecording}
                   leftIcon={<StopIcon size={18} />}
                 >
-                  Stop
+                  {t("stopRecording")}
                 </Button>
               </>
             )}
@@ -518,21 +538,21 @@ const LiveRecorder: React.FC<LiveRecorderProps> = ({ onRecordingComplete, isProc
                   onClick={sendRecording}
                   leftIcon={<SparklesIcon size={18} />}
                 >
-                  Process Recording
+                  {t("processRecording")}
                 </Button>
                 <Button
                   variant="ghost"
                   onClick={discardRecording}
                   leftIcon={<XIcon size={18} />}
                 >
-                  Discard
+                  {t("discardRecording")}
                 </Button>
                 <Button
                   variant="secondary"
                   onClick={startRecording}
                   leftIcon={<MicrophoneIcon size={18} />}
                 >
-                  Record Again
+                  {t("recordAgain")}
                 </Button>
               </>
             )}
@@ -543,7 +563,7 @@ const LiveRecorder: React.FC<LiveRecorderProps> = ({ onRecordingComplete, isProc
       {/* Info footer */}
       <div className="px-6 py-3 bg-[#f8fafc] border-t border-[#e2e8f0] text-center">
         <p className="text-xs text-[#94a3b8]">
-          Recording is processed locally on your device
+          {t("localProcessing")}
         </p>
       </div>
     </Card>
@@ -553,39 +573,42 @@ const LiveRecorder: React.FC<LiveRecorderProps> = ({ onRecordingComplete, isProc
 // ============================================
 // PROCESSING INDICATOR COMPONENT (memoized)
 // ============================================
-const ProcessingIndicator: React.FC = React.memo(() => (
-  <Card>
-    <CardBody className="py-10">
-      <div className="flex flex-col items-center">
-        <MedicalLoader />
-        <h3 className="mt-6 text-lg font-semibold text-[#1e293b]">
-          Processing Audio
-        </h3>
-        <p className="mt-2 text-[#64748b] text-center max-w-md">
-          Transcribing your audio and generating a medical summary.
-          This may take a moment depending on the file length.
-        </p>
+const ProcessingIndicator: React.FC = React.memo(() => {
+  const { t } = useLanguage();
 
-        {/* Processing steps */}
-        <div className="mt-8 flex items-center gap-8">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#2d96c6] to-[#1e7aa8] flex items-center justify-center">
-              <WaveformIcon className="text-white" size={16} />
+  return (
+    <Card>
+      <CardBody className="py-10">
+        <div className="flex flex-col items-center">
+          <MedicalLoader />
+          <h3 className="mt-6 text-lg font-semibold text-[#1e293b]">
+            {t("processingAudioTitle")}
+          </h3>
+          <p className="mt-2 text-[#64748b] text-center max-w-md">
+            {t("processingAudioDesc")}
+          </p>
+
+          {/* Processing steps */}
+          <div className="mt-8 flex items-center gap-8">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#2d96c6] to-[#1e7aa8] flex items-center justify-center">
+                <WaveformIcon className="text-white" size={16} />
+              </div>
+              <span className="text-sm font-medium text-[#2d96c6]">{t("transcribingStep")}</span>
             </div>
-            <span className="text-sm font-medium text-[#2d96c6]">Transcribing</span>
-          </div>
-          <div className="w-8 h-0.5 bg-[#e2e8f0] rounded" />
-          <div className="flex items-center gap-2 opacity-50">
-            <div className="w-8 h-8 rounded-lg bg-[#e2e8f0] flex items-center justify-center">
-              <SparklesIcon className="text-[#94a3b8]" size={16} />
+            <div className="w-8 h-0.5 bg-[#e2e8f0] rounded" />
+            <div className="flex items-center gap-2 opacity-50">
+              <div className="w-8 h-8 rounded-lg bg-[#e2e8f0] flex items-center justify-center">
+                <SparklesIcon className="text-[#94a3b8]" size={16} />
+              </div>
+              <span className="text-sm font-medium text-[#94a3b8]">{t("summarizingStep")}</span>
             </div>
-            <span className="text-sm font-medium text-[#94a3b8]">Summarizing</span>
           </div>
         </div>
-      </div>
-    </CardBody>
-  </Card>
-));
+      </CardBody>
+    </Card>
+  );
+});
 
 ProcessingIndicator.displayName = 'ProcessingIndicator';
 
@@ -608,41 +631,45 @@ const ResultCard: React.FC<ResultCardProps> = React.memo(({
   gradientFrom,
   gradientTo,
   isPending,
-}) => (
-  <Card className="h-full flex flex-col" hover>
-    <CardHeader icon={icon}>
-      <div>
-        <h2 className="font-semibold text-[#1e293b]">{title}</h2>
-        <p className="text-xs text-[#64748b]">
-          {isPending ? "Processing..." : "Generated by AI"}
-        </p>
-      </div>
-    </CardHeader>
-    <CardBody className="flex-1">
-      {isPending ? (
-        <div className="flex items-center justify-center py-8">
-          <div className="flex flex-col items-center gap-3">
-            <div
-              className={`
-                w-10 h-10 rounded-xl bg-gradient-to-br ${gradientFrom} ${gradientTo}
-                flex items-center justify-center animate-pulse
-              `}
-            >
-              {icon}
-            </div>
-            <p className="text-sm text-[#94a3b8]">Generating...</p>
-          </div>
-        </div>
-      ) : (
-        <div className="prose prose-sm max-w-none">
-          <p className="text-[#475569] leading-relaxed whitespace-pre-wrap">
-            {content}
+}) => {
+  const { t } = useLanguage();
+
+  return (
+    <Card className="h-full flex flex-col" hover>
+      <CardHeader icon={icon}>
+        <div>
+          <h2 className="font-semibold text-[#1e293b]">{title}</h2>
+          <p className="text-xs text-[#64748b]">
+            {isPending ? t("processing") : t("generatedByAI")}
           </p>
         </div>
-      )}
-    </CardBody>
-  </Card>
-));
+      </CardHeader>
+      <CardBody className="flex-1">
+        {isPending ? (
+          <div className="flex items-center justify-center py-8">
+            <div className="flex flex-col items-center gap-3">
+              <div
+                className={`
+                  w-10 h-10 rounded-xl bg-gradient-to-br ${gradientFrom} ${gradientTo}
+                  flex items-center justify-center animate-pulse
+                `}
+              >
+                {icon}
+              </div>
+              <p className="text-sm text-[#94a3b8]">{t("generating")}</p>
+            </div>
+          </div>
+        ) : (
+          <div className="prose prose-sm max-w-none">
+            <p className="text-[#475569] leading-relaxed whitespace-pre-wrap">
+              {content}
+            </p>
+          </div>
+        )}
+      </CardBody>
+    </Card>
+  );
+});
 
 ResultCard.displayName = 'ResultCard';
 
@@ -650,6 +677,7 @@ ResultCard.displayName = 'ResultCard';
 // MAIN DASHBOARD COMPONENT
 // ============================================
 export default function MainDashboard() {
+  const { t, language } = useLanguage();
   const [fileName, setFileName] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -659,7 +687,7 @@ export default function MainDashboard() {
   const [streamingContent, setStreamingContent] = useState<string>("");
   const [isDragActive, setIsDragActive] = useState(false);
 
-  const { getDocumentHeader, getDocumentFooter } = useProfile();
+  const { profile, getDocumentHeader, getDocumentFooter } = useProfile();
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const processFile = useCallback(async (file: File) => {
@@ -736,36 +764,246 @@ ${getDocumentFooter()}`;
     };
 
     const sanitizedContent = escapeHtml(document).replace(/\n/g, '<br>');
+    const currentDate = new Date().toLocaleDateString(language === 'fr' ? 'fr-FR' : 'en-GB', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
 
-    // Create a printable window
+    // Create a printable window with professional layout
     const printWindow = window.open('', '_blank');
     if (printWindow) {
       printWindow.document.write(`
         <!DOCTYPE html>
         <html>
         <head>
-          <title>Document Dentaire</title>
+          <title>${String(t("pdfTitle"))} - ${currentDate}</title>
           <meta charset="UTF-8">
           <style>
+            * {
+              margin: 0;
+              padding: 0;
+              box-sizing: border-box;
+            }
+
             body {
               font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-              padding: 40px;
+              line-height: 1.6;
+              color: #1e293b;
+              background: #fff;
+            }
+
+            .page {
               max-width: 800px;
               margin: 0 auto;
-              line-height: 1.6;
+              padding: 40px;
             }
+
+            /* Header */
+            .header {
+              display: flex;
+              justify-content: space-between;
+              align-items: flex-start;
+              padding-bottom: 20px;
+              border-bottom: 3px solid #2d96c6;
+              margin-bottom: 30px;
+            }
+
+            .logo-section {
+              display: flex;
+              align-items: center;
+              gap: 15px;
+            }
+
+            .logo {
+              width: 60px;
+              height: 60px;
+              background: linear-gradient(135deg, #2d96c6, #28b5ad);
+              border-radius: 12px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              color: white;
+              font-size: 28px;
+              font-weight: bold;
+            }
+
+            .practice-info h1 {
+              font-size: 22px;
+              font-weight: 700;
+              color: #1e293b;
+              margin-bottom: 4px;
+            }
+
+            .practice-info .title {
+              font-size: 14px;
+              color: #2d96c6;
+              font-weight: 500;
+            }
+
+            .contact-info {
+              text-align: right;
+              font-size: 13px;
+              color: #64748b;
+            }
+
+            .contact-info p {
+              margin-bottom: 3px;
+            }
+
+            /* Document Title */
+            .document-title {
+              background: linear-gradient(135deg, #f0f7fc, #effcfb);
+              border-radius: 12px;
+              padding: 20px;
+              margin-bottom: 25px;
+              text-align: center;
+            }
+
+            .document-title h2 {
+              font-size: 20px;
+              color: #2d96c6;
+              margin-bottom: 8px;
+            }
+
+            .document-title .date {
+              font-size: 14px;
+              color: #64748b;
+            }
+
+            /* Content */
+            .content-section {
+              margin-bottom: 30px;
+            }
+
+            .section-header {
+              display: flex;
+              align-items: center;
+              gap: 10px;
+              margin-bottom: 15px;
+              padding-bottom: 10px;
+              border-bottom: 2px solid #e2e8f0;
+            }
+
+            .section-icon {
+              width: 32px;
+              height: 32px;
+              background: linear-gradient(135deg, #2d96c6, #28b5ad);
+              border-radius: 8px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              color: white;
+              font-size: 16px;
+            }
+
+            .section-header h3 {
+              font-size: 16px;
+              font-weight: 600;
+              color: #1e293b;
+            }
+
+            .content-box {
+              background: #f8fafc;
+              border: 1px solid #e2e8f0;
+              border-radius: 10px;
+              padding: 20px;
+              font-size: 14px;
+              line-height: 1.8;
+            }
+
+            /* Footer */
+            .footer {
+              margin-top: 40px;
+              padding-top: 20px;
+              border-top: 2px solid #e2e8f0;
+            }
+
+            .disclaimer {
+              background: #fef3c7;
+              border: 1px solid #fbbf24;
+              border-radius: 8px;
+              padding: 12px 16px;
+              font-size: 12px;
+              color: #92400e;
+              margin-bottom: 20px;
+            }
+
+            .confidential {
+              text-align: center;
+              font-size: 11px;
+              color: #94a3b8;
+              text-transform: uppercase;
+              letter-spacing: 2px;
+            }
+
             @media print {
-              body { padding: 20px; }
+              body {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+              }
+              .page {
+                padding: 20px;
+                max-width: 100%;
+              }
+              .logo {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+              }
             }
           </style>
         </head>
-        <body>${sanitizedContent}</body>
+        <body>
+          <div class="page">
+            <!-- Header -->
+            <div class="header">
+              <div class="logo-section">
+                <div class="logo">🦷</div>
+                <div class="practice-info">
+                  <h1>${profile?.name || 'Cabinet Dentaire'}</h1>
+                  <p class="title">${profile?.title || String(t("professionalTitlePlaceholder"))}</p>
+                </div>
+              </div>
+              <div class="contact-info">
+                ${profile?.address ? `<p>${escapeHtml(profile.address)}</p>` : ''}
+                ${profile?.phone ? `<p>📞 ${escapeHtml(profile.phone)}</p>` : ''}
+                ${profile?.email ? `<p>✉️ ${escapeHtml(profile.email)}</p>` : ''}
+              </div>
+            </div>
+
+            <!-- Document Title -->
+            <div class="document-title">
+              <h2>${String(t("pdfTitle"))}</h2>
+              <p class="date">${String(t("pdfDate"))}: ${currentDate}</p>
+            </div>
+
+            <!-- Content -->
+            <div class="content-section">
+              <div class="section-header">
+                <div class="section-icon">📋</div>
+                <h3>${String(t("pdfConsultationNotes"))}</h3>
+              </div>
+              <div class="content-box">
+                ${sanitizedContent}
+              </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="footer">
+              <div class="disclaimer">
+                ⚠️ ${String(t("pdfDisclaimer"))}
+              </div>
+              <p class="confidential">${String(t("pdfConfidential"))}</p>
+            </div>
+          </div>
+        </body>
         </html>
       `);
       printWindow.document.close();
       printWindow.print();
     }
-  }, [document]);
+  }, [document, profile, t, language]);
 
   const onDrop = useCallback((evt: React.DragEvent<HTMLDivElement>) => {
     evt.preventDefault();
@@ -794,7 +1032,7 @@ ${getDocumentFooter()}`;
   const hasContent = !!(transcript || document || error || isStreaming);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#f8fafc] via-[#f0f7fc] to-[#f8fafc]">
+    <div className="min-h-screen bg-gradient-to-br from-[#f8fafc] via-[#f0f7fc] to-[#f8fafc] dark:from-[#0f172a] dark:via-[#1e293b] dark:to-[#0f172a]">
       {/* Header */}
       <Header onClear={clearAll} hasContent={hasContent} />
 
@@ -829,7 +1067,7 @@ ${getDocumentFooter()}`;
                   className="shadow-lg"
                 >
                   <div>
-                    <p className="font-semibold">Processing Error</p>
+                    <p className="font-semibold">{t("processingError")}</p>
                     <p className="mt-1 text-sm opacity-90">{error}</p>
                   </div>
                 </Alert>
@@ -850,8 +1088,8 @@ ${getDocumentFooter()}`;
                   <CardHeader icon={<SparklesIcon className="text-white" size={20} />}>
                     <div className="flex items-center gap-3">
                       <div>
-                        <h2 className="font-semibold text-[#1e293b]">Generating SmartNote</h2>
-                        <p className="text-xs text-[#64748b]">AI is writing...</p>
+                        <h2 className="font-semibold text-[#1e293b]">{t("generatingSmartNote")}</h2>
+                        <p className="text-xs text-[#64748b]">{t("aiWriting")}</p>
                       </div>
                       <div className="flex gap-1">
                         {[0, 1, 2].map((i) => (
@@ -882,8 +1120,8 @@ ${getDocumentFooter()}`;
                 <Card className="overflow-hidden">
                   <CardHeader icon={<DocumentIcon className="text-white" size={20} />}>
                     <div>
-                      <h2 className="font-semibold text-[#1e293b]">Document Généré</h2>
-                      <p className="text-xs text-[#64748b]">Modifiable avant export</p>
+                      <h2 className="font-semibold text-[#1e293b]">{t("generatedDocument")}</h2>
+                      <p className="text-xs text-[#64748b]">{t("editableBeforeExport")}</p>
                     </div>
                   </CardHeader>
                   <CardBody>
@@ -891,7 +1129,7 @@ ${getDocumentFooter()}`;
                       value={document}
                       onChange={(e) => setDocument(e.target.value)}
                       className="w-full h-96 p-4 border-2 border-[#e2e8f0] rounded-xl bg-white text-[#1e293b] font-mono text-sm leading-relaxed resize-y focus:border-[#2d96c6] focus:ring-2 focus:ring-[#2d96c6]/20 outline-none"
-                      placeholder="Document généré..."
+                      placeholder={String(t("documentPlaceholder"))}
                     />
                   </CardBody>
                 </Card>
@@ -903,7 +1141,7 @@ ${getDocumentFooter()}`;
                     onClick={handleExportPDF}
                     leftIcon={<DownloadIcon size={18} />}
                   >
-                    Exporter en PDF
+                    {t("exportPDF")}
                   </Button>
                   <Button
                     variant="secondary"
@@ -913,14 +1151,14 @@ ${getDocumentFooter()}`;
                       }
                     }}
                   >
-                    Copier le document
+                    {t("copyDocument")}
                   </Button>
                   <Button
                     variant="ghost"
                     onClick={() => inputRef.current?.click()}
                     leftIcon={<MicrophoneIcon size={18} />}
                   >
-                    Nouvel enregistrement
+                    {t("newRecording")}
                   </Button>
                 </div>
               </section>
@@ -934,21 +1172,21 @@ ${getDocumentFooter()}`;
                     <div className="w-8 h-8 rounded-lg bg-[#f1f5f9] flex items-center justify-center">
                       <span className="text-sm font-bold">1</span>
                     </div>
-                    <span className="text-sm">Télécharger audio</span>
+                    <span className="text-sm">{t("step1Upload")}</span>
                   </div>
                   <div className="w-8 h-0.5 bg-[#e2e8f0] self-center rounded" />
                   <div className="flex items-center gap-2 text-[#94a3b8]">
                     <div className="w-8 h-8 rounded-lg bg-[#f1f5f9] flex items-center justify-center">
                       <span className="text-sm font-bold">2</span>
                     </div>
-                    <span className="text-sm">Transcription IA</span>
+                    <span className="text-sm">{t("step2Transcription")}</span>
                   </div>
                   <div className="w-8 h-0.5 bg-[#e2e8f0] self-center rounded" />
                   <div className="flex items-center gap-2 text-[#94a3b8]">
                     <div className="w-8 h-8 rounded-lg bg-[#f1f5f9] flex items-center justify-center">
                       <span className="text-sm font-bold">3</span>
                     </div>
-                    <span className="text-sm">Document généré</span>
+                    <span className="text-sm">{t("step3Document")}</span>
                   </div>
                 </div>
               </section>
@@ -958,19 +1196,19 @@ ${getDocumentFooter()}`;
       </main>
 
       {/* Footer */}
-      <footer className="py-6 border-t border-[#e2e8f0] bg-white/50 backdrop-blur-sm">
+      <footer className="py-6 border-t border-[#e2e8f0] dark:border-[#334155] bg-white/50 dark:bg-[#1e293b]/50 backdrop-blur-sm">
         <Container>
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-[#94a3b8]">
             <div className="flex items-center gap-2">
               <ToothIcon size={16} />
-              <span>Dental Assistant v1.0</span>
+              <span>{t("appName")} v1.0</span>
             </div>
             <div className="flex items-center gap-4">
               <span className="flex items-center gap-1">
                 <span className="w-2 h-2 rounded-full bg-[#10b981] animate-pulse" />
-                AI Engine Active
+                {t("aiEngineActive")}
               </span>
-              <span>100% Local Processing</span>
+              <span>{t("localProcessingFooter")}</span>
             </div>
           </div>
         </Container>

@@ -4,7 +4,7 @@ import MainDashboard from "./components/MainDashboard";
 import LanguageSelector from "./components/LanguageSelector";
 import ProfileSetup from "./components/ProfileSetup";
 import ErrorBoundary from "./components/ErrorBoundary";
-import { LanguageProvider, useLanguage } from "./i18n";
+import { LanguageProvider, useLanguage, ThemeProvider } from "./i18n";
 import { ToothIcon, HeartPulseIcon, AlertCircleIcon, RefreshIcon } from "./components/ui/Icons";
 import { Button, MedicalLoader } from "./components/ui";
 import { DentistProfile } from "./hooks/useProfile";
@@ -42,7 +42,7 @@ const SplashScreen: React.FC = () => {
   const { t } = useLanguage();
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#f8fafc] via-[#f0f7fc] to-[#effcfb] relative overflow-hidden">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#f8fafc] via-[#f0f7fc] to-[#effcfb] dark:from-[#0f172a] dark:via-[#1e293b] dark:to-[#0f172a] relative overflow-hidden">
       {/* Animated background elements */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-gradient-to-br from-[#2d96c6]/20 to-[#28b5ad]/20 rounded-full blur-3xl animate-pulse" />
@@ -70,10 +70,10 @@ const SplashScreen: React.FC = () => {
 
         {/* Title */}
         <div className="text-center">
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-[#1e293b] via-[#334155] to-[#1e293b] bg-clip-text text-transparent">
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-[#1e293b] via-[#334155] to-[#1e293b] dark:from-white dark:via-[#94a3b8] dark:to-white bg-clip-text text-transparent">
             {t("appName")}
           </h1>
-          <p className="mt-2 text-[#64748b] font-medium">
+          <p className="mt-2 text-[#64748b] dark:text-[#94a3b8] font-medium">
             {t("appTagline")}
           </p>
         </div>
@@ -85,8 +85,8 @@ const SplashScreen: React.FC = () => {
 
         {/* Version badge */}
         <div className="absolute bottom-8 left-1/2 -translate-x-1/2">
-          <div className="px-4 py-2 rounded-full bg-white/80 backdrop-blur-sm border border-[#e2e8f0] shadow-sm">
-            <span className="text-sm text-[#64748b] font-medium">{t("version")}</span>
+          <div className="px-4 py-2 rounded-full bg-white/80 dark:bg-[#1e293b]/80 backdrop-blur-sm border border-[#e2e8f0] dark:border-[#334155] shadow-sm">
+            <span className="text-sm text-[#64748b] dark:text-[#94a3b8] font-medium">{t("version")}</span>
           </div>
         </div>
       </div>
@@ -258,8 +258,10 @@ function AppContent() {
 // ============================================
 export default function App() {
   return (
-    <LanguageProvider>
-      <AppContent />
-    </LanguageProvider>
+    <ThemeProvider>
+      <LanguageProvider>
+        <AppContent />
+      </LanguageProvider>
+    </ThemeProvider>
   );
 }

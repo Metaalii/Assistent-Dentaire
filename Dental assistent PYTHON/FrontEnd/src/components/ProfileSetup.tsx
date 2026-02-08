@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { DentistProfile } from "../hooks/useProfile";
+import { useLanguage } from "../i18n";
 import { ToothIcon, HeartPulseIcon } from "./ui/Icons";
 import { Button } from "./ui";
 
@@ -8,9 +9,10 @@ interface ProfileSetupProps {
 }
 
 const ProfileSetup: React.FC<ProfileSetupProps> = ({ onComplete }) => {
+  const { t } = useLanguage();
   const [formData, setFormData] = useState<DentistProfile>({
     name: "",
-    title: "Chirurgien-dentiste",
+    title: String(t("professionalTitlePlaceholder")),
     address: "",
     phone: "",
     email: "",
@@ -53,10 +55,10 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ onComplete }) => {
         {/* Title */}
         <div className="text-center">
           <h1 className="text-3xl font-bold bg-gradient-to-r from-[#1e293b] via-[#334155] to-[#1e293b] bg-clip-text text-transparent">
-            Configuration du Cabinet
+            {t("profileSetupTitle")}
           </h1>
           <p className="mt-2 text-[#64748b]">
-            Entrez vos informations professionnelles
+            {t("profileSetupSubtitle")}
           </p>
         </div>
 
@@ -65,13 +67,13 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ onComplete }) => {
           {/* Name */}
           <div>
             <label className="block text-sm font-medium text-[#334155] mb-1">
-              Nom complet *
+              {t("fullName")} *
             </label>
             <input
               type="text"
               value={formData.name}
               onChange={(e) => handleChange("name", e.target.value)}
-              placeholder="Dr Marie DUPONT"
+              placeholder={String(t("fullNamePlaceholder"))}
               className="w-full px-4 py-3 rounded-xl border-2 border-[#e2e8f0] bg-white/80 text-[#1e293b] placeholder-[#94a3b8] focus:border-[#2d96c6] focus:ring-2 focus:ring-[#2d96c6]/20 outline-none transition-all"
               required
             />
@@ -80,13 +82,13 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ onComplete }) => {
           {/* Title */}
           <div>
             <label className="block text-sm font-medium text-[#334155] mb-1">
-              Titre professionnel
+              {t("professionalTitle")}
             </label>
             <input
               type="text"
               value={formData.title}
               onChange={(e) => handleChange("title", e.target.value)}
-              placeholder="Chirurgien-dentiste"
+              placeholder={String(t("professionalTitlePlaceholder"))}
               className="w-full px-4 py-3 rounded-xl border-2 border-[#e2e8f0] bg-white/80 text-[#1e293b] placeholder-[#94a3b8] focus:border-[#2d96c6] focus:ring-2 focus:ring-[#2d96c6]/20 outline-none transition-all"
             />
           </div>
@@ -94,13 +96,13 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ onComplete }) => {
           {/* Address */}
           <div>
             <label className="block text-sm font-medium text-[#334155] mb-1">
-              Adresse du cabinet
+              {t("officeAddress")}
             </label>
             <input
               type="text"
               value={formData.address}
               onChange={(e) => handleChange("address", e.target.value)}
-              placeholder="15, avenue Victor Hugo – 75016 PARIS"
+              placeholder={String(t("officeAddressPlaceholder"))}
               className="w-full px-4 py-3 rounded-xl border-2 border-[#e2e8f0] bg-white/80 text-[#1e293b] placeholder-[#94a3b8] focus:border-[#2d96c6] focus:ring-2 focus:ring-[#2d96c6]/20 outline-none transition-all"
             />
           </div>
@@ -108,13 +110,13 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ onComplete }) => {
           {/* Phone */}
           <div>
             <label className="block text-sm font-medium text-[#334155] mb-1">
-              Téléphone
+              {t("phone")}
             </label>
             <input
               type="tel"
               value={formData.phone}
               onChange={(e) => handleChange("phone", e.target.value)}
-              placeholder="01 23 45 67 89"
+              placeholder={String(t("phonePlaceholder"))}
               className="w-full px-4 py-3 rounded-xl border-2 border-[#e2e8f0] bg-white/80 text-[#1e293b] placeholder-[#94a3b8] focus:border-[#2d96c6] focus:ring-2 focus:ring-[#2d96c6]/20 outline-none transition-all"
             />
           </div>
@@ -122,13 +124,13 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ onComplete }) => {
           {/* Email */}
           <div>
             <label className="block text-sm font-medium text-[#334155] mb-1">
-              Email
+              {t("email")}
             </label>
             <input
               type="email"
               value={formData.email}
               onChange={(e) => handleChange("email", e.target.value)}
-              placeholder="contact@cabinet-dentaire.fr"
+              placeholder={String(t("emailPlaceholder"))}
               className="w-full px-4 py-3 rounded-xl border-2 border-[#e2e8f0] bg-white/80 text-[#1e293b] placeholder-[#94a3b8] focus:border-[#2d96c6] focus:ring-2 focus:ring-[#2d96c6]/20 outline-none transition-all"
             />
           </div>
@@ -140,13 +142,13 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ onComplete }) => {
             className="w-full mt-6"
             disabled={!isValid}
           >
-            Continuer
+            {t("continue")}
           </Button>
         </form>
 
         {/* Info text */}
         <p className="text-xs text-[#94a3b8] text-center">
-          Ces informations seront utilisées pour générer l'en-tête de vos documents
+          {t("profileInfoText")}
         </p>
       </div>
     </div>
