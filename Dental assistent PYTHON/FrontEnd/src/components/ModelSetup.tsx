@@ -1,5 +1,12 @@
 import React, { useEffect, useRef, useState } from "react";
-import { checkModelStatus, downloadModel, HardwareInfo } from "../api";
+import {
+  checkModelStatus,
+  downloadModel,
+  downloadWhisper,
+  subscribeDownloadProgress,
+  subscribeWhisperProgress,
+  HardwareInfo,
+} from "../api";
 import { useLanguage } from "../i18n";
 import {
   Button,
@@ -140,9 +147,15 @@ export default function ModelSetup({ onReady }: Props) {
   const [hardware, setHardware] = useState<HardwareInfo | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
   const [progress, setProgress] = useState(0);
+  const [downloadedMB, setDownloadedMB] = useState(0);
+  const [totalMB, setTotalMB] = useState(0);
+  // Track which model is currently downloading
+  const [downloadPhase, setDownloadPhase] = useState<"whisper" | "llm">("whisper");
 
-  const progressTimer = useRef<number | null>(null);
-  const statusTimer = useRef<number | null>(null);
+  // Ref to abort SSE stream on unmount
+  const abortSSE = useRef<(() => void) | null>(null);
+  // Fallback polling ref (only used if SSE fails)
+  const fallbackTimer = useRef<number | null>(null);
 
   const steps = [t("stepHardware") as string, t("stepDownload") as string, t("stepReady") as string];
   const currentStepIndex = step === "checking" ? 0 : step === "confirm" ? 0 : step === "downloading" ? 1 : 0;
@@ -156,11 +169,9 @@ export default function ModelSetup({ onReady }: Props) {
         if (cancelled) return;
 
         setHardware(status);
-        if (status.is_downloaded) {
-          // Model already present - go directly to app
+        if (status.is_downloaded && status.whisper_downloaded) {
           onReady();
         } else {
-          // Model not present - show confirmation screen
           setStep("confirm");
         }
       } catch {
@@ -173,8 +184,8 @@ export default function ModelSetup({ onReady }: Props) {
 
     return () => {
       cancelled = true;
-      if (progressTimer.current) window.clearInterval(progressTimer.current);
-      if (statusTimer.current) window.clearInterval(statusTimer.current);
+      if (abortSSE.current) abortSSE.current();
+      if (fallbackTimer.current) window.clearInterval(fallbackTimer.current);
     };
   }, [onReady]);
 
@@ -182,7 +193,7 @@ export default function ModelSetup({ onReady }: Props) {
     try {
       const status = await checkModelStatus();
       setHardware(status);
-      if (status.is_downloaded) {
+      if (status.is_downloaded && status.whisper_downloaded) {
         setProgress(100);
         setStep("confirm");
         setTimeout(onReady, 300);
@@ -193,31 +204,106 @@ export default function ModelSetup({ onReady }: Props) {
     }
   };
 
-  const startPolling = () => {
-    progressTimer.current = window.setInterval(() => {
-      setProgress((old) => (old < 90 ? old + 1 : old));
-    }, 500);
-
-    statusTimer.current = window.setInterval(async () => {
+  /** Fallback: poll every 5 s if SSE connection fails */
+  const startFallbackPolling = () => {
+    fallbackTimer.current = window.setInterval(async () => {
       try {
         const status = await checkModelStatus();
-        if (status.is_downloaded) {
-          if (progressTimer.current) window.clearInterval(progressTimer.current);
-          if (statusTimer.current) window.clearInterval(statusTimer.current);
+        if (status.is_downloaded && status.whisper_downloaded) {
+          if (fallbackTimer.current) window.clearInterval(fallbackTimer.current);
           setProgress(100);
           setTimeout(onReady, 500);
         }
       } catch {
         // ignore transient errors
       }
-    }, 3000);
+    }, 5000);
+  };
+
+  /** Start LLM download with SSE progress */
+  const startLLMDownload = async () => {
+    setDownloadPhase("llm");
+    setProgress(0);
+    setDownloadedMB(0);
+    setTotalMB(0);
+
+    try {
+      const res = await downloadModel();
+      if (res.status === "already_exists") {
+        setProgress(100);
+        setTimeout(onReady, 500);
+        return;
+      }
+    } catch {
+      setStep("error");
+      setErrorMsg("Failed to start LLM download.");
+      return;
+    }
+
+    abortSSE.current = subscribeDownloadProgress(
+      (p) => {
+        setProgress(Math.round(p.progress));
+        setDownloadedMB(Math.round(p.downloaded_bytes / (1024 * 1024)));
+        setTotalMB(Math.round(p.total_bytes / (1024 * 1024)));
+      },
+      () => {
+        setProgress(100);
+        setTimeout(onReady, 500);
+      },
+      () => startFallbackPolling(),
+    );
   };
 
   const handleDownload = async () => {
     try {
       setStep("downloading");
-      await downloadModel();
-      startPolling();
+
+      // Phase 1: Download Whisper if needed
+      const needsWhisper = hardware && !hardware.whisper_downloaded;
+      const needsLLM = hardware && !hardware.is_downloaded;
+
+      if (needsWhisper) {
+        setDownloadPhase("whisper");
+        setProgress(0);
+        setDownloadedMB(0);
+        setTotalMB(0);
+
+        const whisperRes = await downloadWhisper();
+        if (whisperRes.status === "already_exists") {
+          // Skip to LLM
+          if (needsLLM) {
+            await startLLMDownload();
+          } else {
+            setTimeout(onReady, 500);
+          }
+          return;
+        }
+
+        // Subscribe to Whisper progress, then chain to LLM when done
+        abortSSE.current = subscribeWhisperProgress(
+          (p) => {
+            setProgress(Math.round(p.progress));
+            setDownloadedMB(Math.round(p.downloaded_bytes / (1024 * 1024)));
+            setTotalMB(Math.round(p.total_bytes / (1024 * 1024)));
+          },
+          () => {
+            // Whisper done -> start LLM if needed
+            if (needsLLM) {
+              startLLMDownload();
+            } else {
+              setProgress(100);
+              setTimeout(onReady, 500);
+            }
+          },
+          () => startFallbackPolling(),
+        );
+      } else if (needsLLM) {
+        // Only LLM needed
+        await startLLMDownload();
+      } else {
+        // Both already present
+        setTimeout(onReady, 500);
+      }
     } catch {
       setStep("error");
       setErrorMsg("Failed to start download.");
@@ -296,11 +382,24 @@ export default function ModelSetup({ onReady }: Props) {
         </div>
       </div>
       <CardBody className="space-y-6">
+        {/* Phase indicator */}
+        <div className="flex items-center gap-2">
+          <span
+            className={`text-xs font-semibold px-2 py-1 rounded-full ${
+              downloadPhase === "whisper"
+                ? "bg-[#f0f7fc] text-[#2d96c6]"
+                : "bg-[#f0fdf4] text-[#10b981]"
+            }`}
+          >
+            {downloadPhase === "whisper" ? "1/2 — Whisper (speech)" : "2/2 — LLM (AI)"}
+          </span>
+        </div>
+
         {/* Progress section */}
         <div>
           <div className="flex items-center justify-between mb-3">
             <span className="text-sm font-medium text-[#334155]">
-              {t("downloading")}
+              {downloadPhase === "whisper" ? "Whisper model" : t("downloading")}
             </span>
             <span className="text-sm font-bold text-[#2d96c6]">{progress}%</span>
           </div>
@@ -321,12 +420,14 @@ export default function ModelSetup({ onReady }: Props) {
         <div className="grid grid-cols-2 gap-4">
           <div className="bg-[#f8fafc] rounded-xl p-4 text-center">
             <p className="text-2xl font-bold text-[#2d96c6]">
-              {hardware?.recommended_model?.includes("7B") ? "~4GB" : "~2GB"}
+              {totalMB > 0
+                ? `${downloadedMB} / ${totalMB} MB`
+                : downloadPhase === "whisper" ? "~464 MB" : "~4 GB"}
             </p>
             <p className="text-xs text-[#94a3b8] mt-1">{t("downloadSize")}</p>
           </div>
           <div className="bg-[#f8fafc] rounded-xl p-4 text-center">
-            <p className="text-2xl font-bold text-[#28b5ad]">100%</p>
+            <p className="text-2xl font-bold text-[#28b5ad]">{progress}%</p>
             <p className="text-xs text-[#94a3b8] mt-1">{t("optimal")}</p>
           </div>
         </div>
