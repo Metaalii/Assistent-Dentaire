@@ -189,6 +189,70 @@ export async function checkModelStatus(): Promise<HardwareInfo> {
   return res.json();
 }
 
+export interface DownloadProgress {
+  progress: number;
+  downloaded_bytes: number;
+  total_bytes: number;
+  done?: boolean;
+  error?: string;
+}
+
+/**
+ * Subscribe to real-time download progress via SSE.
+ * Returns an abort function to close the connection.
+ */
+export function subscribeDownloadProgress(
+  onProgress: (p: DownloadProgress) => void,
+  onDone: () => void,
+  onError: (err: string) => void,
+): () => void {
+  const controller = new AbortController();
+
+  (async () => {
+    try {
+      const res = await fetch(`${BASE_URL}/setup/download-progress`, {
+        signal: controller.signal,
+      });
+      if (!res.ok) {
+        onError(`SSE connection failed: ${res.status}`);
+        return;
+      }
+      const reader = res.body?.getReader();
+      if (!reader) { onError("No response body"); return; }
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const raw = line.slice(6).trim();
+          if (!raw) continue;
+          try {
+            const data: DownloadProgress = JSON.parse(raw);
+            if (data.error) { onError(data.error); return; }
+            onProgress(data);
+            if (data.done) { onDone(); return; }
+          } catch { /* skip malformed */ }
+        }
+      }
+    } catch (err) {
+      if (!controller.signal.aborted) {
+        onError(err instanceof Error ? err.message : String(err));
+      }
+    }
+  })();
+
+  return () => controller.abort();
+}
+
 export async function downloadModel(): Promise<{ status: string }> {
   const res = await fetch(`${BASE_URL}/setup/download-model`, {
     method: "POST",

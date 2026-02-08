@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { checkModelStatus, downloadModel, HardwareInfo } from "../api";
+import { checkModelStatus, downloadModel, subscribeDownloadProgress, HardwareInfo } from "../api";
 import { useLanguage } from "../i18n";
 import {
   Button,
@@ -140,9 +140,13 @@ export default function ModelSetup({ onReady }: Props) {
   const [hardware, setHardware] = useState<HardwareInfo | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
   const [progress, setProgress] = useState(0);
+  const [downloadedMB, setDownloadedMB] = useState(0);
+  const [totalMB, setTotalMB] = useState(0);
 
-  const progressTimer = useRef<number | null>(null);
-  const statusTimer = useRef<number | null>(null);
+  // Ref to abort SSE stream on unmount
+  const abortSSE = useRef<(() => void) | null>(null);
+  // Fallback polling ref (only used if SSE fails)
+  const fallbackTimer = useRef<number | null>(null);
 
   const steps = [t("stepHardware") as string, t("stepDownload") as string, t("stepReady") as string];
   const currentStepIndex = step === "checking" ? 0 : step === "confirm" ? 0 : step === "downloading" ? 1 : 0;
@@ -157,10 +161,8 @@ export default function ModelSetup({ onReady }: Props) {
 
         setHardware(status);
         if (status.is_downloaded) {
-          // Model already present - go directly to app
           onReady();
         } else {
-          // Model not present - show confirmation screen
           setStep("confirm");
         }
       } catch {
@@ -173,8 +175,8 @@ export default function ModelSetup({ onReady }: Props) {
 
     return () => {
       cancelled = true;
-      if (progressTimer.current) window.clearInterval(progressTimer.current);
-      if (statusTimer.current) window.clearInterval(statusTimer.current);
+      if (abortSSE.current) abortSSE.current();
+      if (fallbackTimer.current) window.clearInterval(fallbackTimer.current);
     };
   }, [onReady]);
 
@@ -193,31 +195,48 @@ export default function ModelSetup({ onReady }: Props) {
     }
   };
 
-  const startPolling = () => {
-    progressTimer.current = window.setInterval(() => {
-      setProgress((old) => (old < 90 ? old + 1 : old));
-    }, 500);
-
-    statusTimer.current = window.setInterval(async () => {
+  /** Fallback: poll every 5 s if SSE connection fails */
+  const startFallbackPolling = () => {
+    fallbackTimer.current = window.setInterval(async () => {
       try {
         const status = await checkModelStatus();
         if (status.is_downloaded) {
-          if (progressTimer.current) window.clearInterval(progressTimer.current);
-          if (statusTimer.current) window.clearInterval(statusTimer.current);
+          if (fallbackTimer.current) window.clearInterval(fallbackTimer.current);
           setProgress(100);
           setTimeout(onReady, 500);
         }
       } catch {
         // ignore transient errors
       }
-    }, 3000);
+    }, 5000);
+  };
+
+  /** Primary: subscribe to real-time SSE progress stream */
+  const startSSE = () => {
+    abortSSE.current = subscribeDownloadProgress(
+      (p) => {
+        setProgress(Math.round(p.progress));
+        setDownloadedMB(Math.round(p.downloaded_bytes / (1024 * 1024)));
+        setTotalMB(Math.round(p.total_bytes / (1024 * 1024)));
+      },
+      () => {
+        // done
+        setProgress(100);
+        setTimeout(onReady, 500);
+      },
+      (_err) => {
+        // SSE failed – fall back to slow polling
+        startFallbackPolling();
+      },
+    );
   };
 
   const handleDownload = async () => {
     try {
       setStep("downloading");
+      setProgress(0);
       await downloadModel();
-      startPolling();
+      startSSE();
     } catch {
       setStep("error");
       setErrorMsg("Failed to start download.");
@@ -321,12 +340,14 @@ export default function ModelSetup({ onReady }: Props) {
         <div className="grid grid-cols-2 gap-4">
           <div className="bg-[#f8fafc] rounded-xl p-4 text-center">
             <p className="text-2xl font-bold text-[#2d96c6]">
-              {hardware?.recommended_model?.includes("7B") ? "~4GB" : "~2GB"}
+              {totalMB > 0
+                ? `${downloadedMB} / ${totalMB} MB`
+                : hardware?.recommended_model?.includes("7B") ? "~4GB" : "~2GB"}
             </p>
             <p className="text-xs text-[#94a3b8] mt-1">{t("downloadSize")}</p>
           </div>
           <div className="bg-[#f8fafc] rounded-xl p-4 text-center">
-            <p className="text-2xl font-bold text-[#28b5ad]">100%</p>
+            <p className="text-2xl font-bold text-[#28b5ad]">{progress}%</p>
             <p className="text-xs text-[#94a3b8] mt-1">{t("optimal")}</p>
           </div>
         </div>

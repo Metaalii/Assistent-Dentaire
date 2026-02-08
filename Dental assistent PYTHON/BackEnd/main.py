@@ -1,8 +1,11 @@
+import asyncio
 import json
 import logging
 import os
 import re
 import shutil
+import threading
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -22,6 +25,27 @@ from app.llm_config import SMARTNOTE_PROMPT_OPTIMIZED
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("dental_assistant")
+
+# ---------------------------------------------------------------------------
+# Download state tracking & concurrency lock
+# ---------------------------------------------------------------------------
+_download_lock = threading.Lock()  # Prevents concurrent downloads
+
+# Shared mutable state for download progress (read by SSE endpoint)
+_download_state: dict = {
+    "active": False,
+    "progress": 0.0,       # 0-100
+    "downloaded_bytes": 0,
+    "total_bytes": 0,
+    "error": None,
+    "done": False,
+}
+
+# ---------------------------------------------------------------------------
+# Lightweight cache for GET /setup/check-models
+# ---------------------------------------------------------------------------
+_check_models_cache: dict = {"result": None, "ts": 0.0}
+_CHECK_MODELS_TTL = 5.0  # seconds
 
 
 @asynccontextmanager
@@ -193,39 +217,76 @@ def _ensure_parent_dir(path: Path) -> None:
 
 def _atomic_download(url: str, dest_path: Path) -> None:
     """
-    MVP-safe download:
-    - stream download
+    MVP-safe download with progress tracking:
+    - stream download in chunks (tracks bytes for SSE progress)
     - raise_for_status() to avoid saving error pages
     - write to .part then rename atomically
+    - updates _download_state so the SSE endpoint can push progress
+    - guarded by _download_lock to prevent concurrent downloads
     """
-    _ensure_parent_dir(dest_path)
-    tmp_path = dest_path.with_suffix(dest_path.suffix + ".part")
+    global _download_state
 
-    logger.info("Downloading model: %s -> %s", url, dest_path)
-
-    headers = {}
-    hf_token = os.getenv("HUGGINGFACE_HUB_TOKEN")
-    if hf_token:
-        headers["Authorization"] = f"Bearer {hf_token}"
+    if not _download_lock.acquire(blocking=False):
+        logger.warning("Download already in progress, skipping duplicate request")
+        return
 
     try:
+        _download_state = {
+            "active": True, "progress": 0.0,
+            "downloaded_bytes": 0, "total_bytes": 0,
+            "error": None, "done": False,
+        }
+
+        _ensure_parent_dir(dest_path)
+        tmp_path = dest_path.with_suffix(dest_path.suffix + ".part")
+
+        logger.info("Downloading model: %s -> %s", url, dest_path)
+
+        headers = {}
+        hf_token = os.getenv("HUGGINGFACE_HUB_TOKEN")
+        if hf_token:
+            headers["Authorization"] = f"Bearer {hf_token}"
+
         with requests.get(url, headers=headers, stream=True, timeout=(10, 180)) as r:
             r.raise_for_status()
+            total = int(r.headers.get("Content-Length", 0))
+            _download_state["total_bytes"] = total
+            downloaded = 0
+            chunk_size = 256 * 1024  # 256 KB chunks
+
             with open(tmp_path, "wb") as f:
-                shutil.copyfileobj(r.raw, f)
+                for chunk in r.iter_content(chunk_size=chunk_size):
+                    if chunk:
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        _download_state["downloaded_bytes"] = downloaded
+                        if total > 0:
+                            _download_state["progress"] = round(
+                                (downloaded / total) * 100, 1
+                            )
                 f.flush()
 
         tmp_path.replace(dest_path)
+        _download_state["progress"] = 100.0
+        _download_state["done"] = True
+        _download_state["active"] = False
+        # Invalidate check-models cache so next call sees the new file
+        _check_models_cache["ts"] = 0.0
         logger.info("Model download complete: %s", dest_path)
 
-    except Exception:
+    except Exception as exc:
         logger.exception("Model download failed")
+        _download_state["error"] = str(exc)
+        _download_state["active"] = False
         try:
+            tmp_path = dest_path.with_suffix(dest_path.suffix + ".part")
             if tmp_path.exists():
                 tmp_path.unlink()
         except Exception:
             logger.warning("Failed to remove partial file: %s", tmp_path)
         raise
+    finally:
+        _download_lock.release()
 
 
 def _is_model_valid(model_path: Path, expected_size_gb: float) -> bool:
@@ -254,6 +315,14 @@ def _is_model_valid(model_path: Path, expected_size_gb: float) -> bool:
 
 @app.get("/setup/check-models")
 async def check_models():
+    # Return cached result if still fresh (avoids repeated disk I/O + hw detection)
+    now = time.monotonic()
+    if (
+        _check_models_cache["result"] is not None
+        and (now - _check_models_cache["ts"]) < _CHECK_MODELS_TTL
+    ):
+        return _check_models_cache["result"]
+
     # Get detailed hardware info from tiered detection
     hw_info = get_hardware_info()
     profile = hw_info["profile"]
@@ -267,7 +336,7 @@ async def check_models():
     # Get alternative model recommendations
     alternatives = ALTERNATIVE_MODELS.get(profile, [])
 
-    return {
+    result = {
         # Core info
         "hardware_profile": profile,
         "is_downloaded": is_valid,
@@ -286,6 +355,10 @@ async def check_models():
         "alternative_models": alternatives,
         "model_recommendation_note": _get_recommendation_note(profile),
     }
+
+    _check_models_cache["result"] = result
+    _check_models_cache["ts"] = now
+    return result
 
 
 def _get_recommendation_note(profile: str) -> str:
@@ -309,6 +382,10 @@ def _get_recommendation_note(profile: str) -> str:
 
 @app.post("/setup/download-model", dependencies=[Depends(verify_api_key)])
 async def download_model(background_tasks: BackgroundTasks):
+    # Reject if a download is already running
+    if _download_state["active"]:
+        return {"status": "already_downloading"}
+
     profile = analyze_hardware()
     cfg = MODEL_CONFIGS[profile]
     model_path = get_llm_model_path(profile)
@@ -326,6 +403,50 @@ async def download_model(background_tasks: BackgroundTasks):
     url = cfg["url"]
     background_tasks.add_task(_atomic_download, url, model_path)
     return {"status": "started", "profile": profile}
+
+
+@app.get("/setup/download-progress")
+async def download_progress():
+    """
+    SSE endpoint streaming download progress.
+    Opens a single connection; the backend pushes events until done/error.
+    Events:
+      data: {"progress": 42.1, "downloaded_bytes": ..., "total_bytes": ...}
+      data: {"progress": 100, "done": true}
+      data: {"error": "..."}
+    """
+    async def event_stream():
+        # Push current state immediately, then every ~1 s
+        while True:
+            state = _download_state.copy()
+
+            if state.get("error"):
+                yield f"data: {json.dumps({'error': state['error']})}\n\n"
+                return
+
+            payload = {
+                "progress": state["progress"],
+                "downloaded_bytes": state["downloaded_bytes"],
+                "total_bytes": state["total_bytes"],
+            }
+
+            if state.get("done"):
+                payload["done"] = True
+                yield f"data: {json.dumps(payload)}\n\n"
+                return
+
+            yield f"data: {json.dumps(payload)}\n\n"
+            await asyncio.sleep(1)
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.get("/health")
