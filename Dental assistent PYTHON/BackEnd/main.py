@@ -18,7 +18,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from app.config import MODEL_CONFIGS, ALTERNATIVE_MODELS, get_llm_model_path, analyze_hardware, get_hardware_info
+from app.config import (
+    MODEL_CONFIGS, ALTERNATIVE_MODELS, get_llm_model_path, analyze_hardware,
+    get_hardware_info, WHISPER_MODEL_PATH, WHISPER_MODEL_FILES, WHISPER_EXPECTED_SIZE_MB,
+)
 from app.middleware import MaxRequestSizeMiddleware, SimpleRateLimitMiddleware
 from app.security import verify_api_key, check_api_key_configured, validate_security_config
 from app.llm_config import SMARTNOTE_PROMPT_OPTIMIZED
@@ -27,16 +30,28 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("dental_assistant")
 
 # ---------------------------------------------------------------------------
-# Download state tracking & concurrency lock
+# Download state tracking & concurrency locks
 # ---------------------------------------------------------------------------
-_download_lock = threading.Lock()  # Prevents concurrent downloads
+_download_lock = threading.Lock()  # Prevents concurrent LLM downloads
+_whisper_download_lock = threading.Lock()  # Prevents concurrent Whisper downloads
 
-# Shared mutable state for download progress (read by SSE endpoint)
+# Shared mutable state for LLM download progress (read by SSE endpoint)
 _download_state: dict = {
     "active": False,
     "progress": 0.0,       # 0-100
     "downloaded_bytes": 0,
     "total_bytes": 0,
+    "error": None,
+    "done": False,
+}
+
+# Shared mutable state for Whisper download progress
+_whisper_download_state: dict = {
+    "active": False,
+    "progress": 0.0,
+    "downloaded_bytes": 0,
+    "total_bytes": 0,
+    "current_file": "",
     "error": None,
     "done": False,
 }
@@ -336,6 +351,9 @@ async def check_models():
     # Get alternative model recommendations
     alternatives = ALTERNATIVE_MODELS.get(profile, [])
 
+    # Check Whisper model status
+    whisper_valid = _is_whisper_valid()
+
     result = {
         # Core info
         "hardware_profile": profile,
@@ -345,6 +363,9 @@ async def check_models():
         "download_url": cfg["url"],
         "model_size_gb": expected_size,
         "model_description": cfg.get("description"),
+        # Whisper model info
+        "whisper_downloaded": whisper_valid,
+        "whisper_size_mb": WHISPER_EXPECTED_SIZE_MB,
         # Detailed hardware info
         "gpu_detected": hw_info.get("gpu_detected", False),
         "gpu_name": hw_info.get("gpu_name"),
@@ -449,6 +470,160 @@ async def download_progress():
     )
 
 
+# --- Whisper model download ---
+
+def _is_whisper_valid() -> bool:
+    """Check if the Whisper model directory exists and contains the required files."""
+    model_dir = Path(WHISPER_MODEL_PATH)
+    if not model_dir.exists():
+        return False
+    # Must contain at least model.bin and config.json
+    required = {"model.bin", "config.json"}
+    existing = {f.name for f in model_dir.iterdir()}
+    if not required.issubset(existing):
+        return False
+    # model.bin must be large enough (~461 MB, check ≥ 80%)
+    model_bin = model_dir / "model.bin"
+    if model_bin.stat().st_size < 350 * 1024 * 1024:
+        logger.warning("Whisper model.bin appears incomplete: %d bytes", model_bin.stat().st_size)
+        return False
+    return True
+
+
+def _download_whisper_files() -> None:
+    """
+    Download all Whisper model files into the whisper-small directory.
+    Tracks cumulative progress across all files.
+    Guarded by _whisper_download_lock.
+    """
+    global _whisper_download_state
+
+    if not _whisper_download_lock.acquire(blocking=False):
+        logger.warning("Whisper download already in progress, skipping")
+        return
+
+    try:
+        total_expected = sum(f["size_mb"] for f in WHISPER_MODEL_FILES) * 1024 * 1024
+        _whisper_download_state = {
+            "active": True, "progress": 0.0,
+            "downloaded_bytes": 0, "total_bytes": int(total_expected),
+            "current_file": "", "error": None, "done": False,
+        }
+
+        dest_dir = Path(WHISPER_MODEL_PATH)
+        dest_dir.mkdir(parents=True, exist_ok=True)
+
+        headers = {}
+        hf_token = os.getenv("HUGGINGFACE_HUB_TOKEN")
+        if hf_token:
+            headers["Authorization"] = f"Bearer {hf_token}"
+
+        cumulative = 0
+        # Track estimated vs actual totals per file for accurate progress
+        remaining_estimate = int(total_expected)
+
+        for file_info in WHISPER_MODEL_FILES:
+            fname = file_info["name"]
+            url = file_info["url"]
+            dest_file = dest_dir / fname
+            tmp_file = dest_file.with_suffix(dest_file.suffix + ".part")
+            _whisper_download_state["current_file"] = fname
+            file_estimate = int(file_info["size_mb"] * 1024 * 1024)
+
+            logger.info("Downloading Whisper file: %s", fname)
+
+            with requests.get(url, headers=headers, stream=True, timeout=(10, 300)) as r:
+                r.raise_for_status()
+                file_total = int(r.headers.get("Content-Length", 0))
+                # Refine total_bytes: replace this file's estimate with actual size
+                if file_total:
+                    remaining_estimate -= file_estimate
+                    _whisper_download_state["total_bytes"] = cumulative + file_total + remaining_estimate
+                else:
+                    remaining_estimate -= file_estimate
+
+                chunk_size = 256 * 1024
+                with open(tmp_file, "wb") as f:
+                    for chunk in r.iter_content(chunk_size=chunk_size):
+                        if chunk:
+                            f.write(chunk)
+                            cumulative += len(chunk)
+                            _whisper_download_state["downloaded_bytes"] = cumulative
+                            actual_total = _whisper_download_state["total_bytes"]
+                            if actual_total > 0:
+                                _whisper_download_state["progress"] = round(
+                                    (cumulative / actual_total) * 100, 1
+                                )
+                    f.flush()
+
+            tmp_file.replace(dest_file)
+            logger.info("Whisper file complete: %s", fname)
+
+        _whisper_download_state["progress"] = 100.0
+        _whisper_download_state["done"] = True
+        _whisper_download_state["active"] = False
+        _check_models_cache["ts"] = 0.0
+        logger.info("Whisper model download complete: %s", dest_dir)
+
+    except Exception as exc:
+        logger.exception("Whisper model download failed")
+        _whisper_download_state["error"] = str(exc)
+        _whisper_download_state["active"] = False
+        raise
+    finally:
+        _whisper_download_lock.release()
+
+
+@app.post("/setup/download-whisper", dependencies=[Depends(verify_api_key)])
+async def download_whisper(background_tasks: BackgroundTasks):
+    """Start downloading the Whisper model files in the background."""
+    if _whisper_download_state["active"]:
+        return {"status": "already_downloading"}
+
+    if _is_whisper_valid():
+        return {"status": "already_exists"}
+
+    background_tasks.add_task(_download_whisper_files)
+    return {"status": "started"}
+
+
+@app.get("/setup/whisper-download-progress")
+async def whisper_download_progress():
+    """SSE endpoint streaming Whisper download progress."""
+    async def event_stream():
+        while True:
+            state = _whisper_download_state.copy()
+
+            if state.get("error"):
+                yield f"data: {json.dumps({'error': state['error']})}\n\n"
+                return
+
+            payload = {
+                "progress": state["progress"],
+                "downloaded_bytes": state["downloaded_bytes"],
+                "total_bytes": state["total_bytes"],
+                "current_file": state.get("current_file", ""),
+            }
+
+            if state.get("done"):
+                payload["done"] = True
+                yield f"data: {json.dumps(payload)}\n\n"
+                return
+
+            yield f"data: {json.dumps(payload)}\n\n"
+            await asyncio.sleep(1)
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 @app.get("/health")
 async def health():
     profile = analyze_hardware()
@@ -456,4 +631,5 @@ async def health():
     model_path = get_llm_model_path(profile)
     expected_size = cfg.get("size_gb", 0)
     models_ready = _is_model_valid(model_path, expected_size)
-    return {"status": "ok", "models_ready": models_ready}
+    whisper_ready = _is_whisper_valid()
+    return {"status": "ok", "models_ready": models_ready, "whisper_ready": whisper_ready}

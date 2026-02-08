@@ -45,6 +45,23 @@ MODELS_DIR.mkdir(parents=True, exist_ok=True)
 # Whisper model path (fixed location)
 WHISPER_MODEL_PATH = MODELS_DIR / "whisper-small"
 
+# ============================================
+# WHISPER MODEL DOWNLOAD CONFIGURATION
+# ============================================
+# faster-whisper uses CTranslate2 format: a directory with multiple files.
+# Source: https://huggingface.co/Systran/faster-whisper-small
+
+_WHISPER_HF_BASE = "https://huggingface.co/Systran/faster-whisper-small/resolve/main"
+
+WHISPER_MODEL_FILES = [
+    {"name": "config.json",     "url": f"{_WHISPER_HF_BASE}/config.json",     "size_mb": 0.002},
+    {"name": "model.bin",       "url": f"{_WHISPER_HF_BASE}/model.bin",       "size_mb": 461},
+    {"name": "tokenizer.json",  "url": f"{_WHISPER_HF_BASE}/tokenizer.json",  "size_mb": 2.2},
+    {"name": "vocabulary.json", "url": f"{_WHISPER_HF_BASE}/vocabulary.json", "size_mb": 0.8},
+]
+
+WHISPER_EXPECTED_SIZE_MB = 464  # approximate total
+
 
 # ============================================
 # TIERED HARDWARE DETECTION

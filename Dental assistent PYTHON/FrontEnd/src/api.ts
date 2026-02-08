@@ -44,6 +44,8 @@ export interface HardwareInfo {
   recommended_model: string;
   is_downloaded: boolean;
   download_url?: string;
+  whisper_downloaded: boolean;
+  whisper_size_mb?: number;
 }
 
 export async function transcribeAudio(file: File, language?: string): Promise<TranscribeResponse> {
@@ -261,6 +263,76 @@ export async function downloadModel(): Promise<{ status: string }> {
 
   if (!res.ok) throw new Error(await safeError(res));
   return res.json();
+}
+
+export async function downloadWhisper(): Promise<{ status: string }> {
+  const res = await fetch(`${BASE_URL}/setup/download-whisper`, {
+    method: "POST",
+    headers: await authHeaders(),
+  });
+
+  if (!res.ok) throw new Error(await safeError(res));
+  return res.json();
+}
+
+export interface WhisperDownloadProgress extends DownloadProgress {
+  current_file?: string;
+}
+
+/**
+ * Subscribe to real-time Whisper download progress via SSE.
+ * Returns an abort function to close the connection.
+ */
+export function subscribeWhisperProgress(
+  onProgress: (p: WhisperDownloadProgress) => void,
+  onDone: () => void,
+  onError: (err: string) => void,
+): () => void {
+  const controller = new AbortController();
+
+  (async () => {
+    try {
+      const res = await fetch(`${BASE_URL}/setup/whisper-download-progress`, {
+        signal: controller.signal,
+      });
+      if (!res.ok) {
+        onError(`SSE connection failed: ${res.status}`);
+        return;
+      }
+      const reader = res.body?.getReader();
+      if (!reader) { onError("No response body"); return; }
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const raw = line.slice(6).trim();
+          if (!raw) continue;
+          try {
+            const data: WhisperDownloadProgress = JSON.parse(raw);
+            if (data.error) { onError(data.error); return; }
+            onProgress(data);
+            if (data.done) { onDone(); return; }
+          } catch { /* skip malformed */ }
+        }
+      }
+    } catch (err) {
+      if (!controller.signal.aborted) {
+        onError(err instanceof Error ? err.message : String(err));
+      }
+    }
+  })();
+
+  return () => controller.abort();
 }
 
 async function safeError(res: Response): Promise<string> {
