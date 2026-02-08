@@ -7,7 +7,7 @@ from typing import Optional
 from fastapi import HTTPException
 
 from app.config import WHISPER_MODEL_PATH, get_device_settings, get_hardware_info
-from app.llm_config import WHISPER_CONFIG, WHISPER_WORKERS
+from app.llm_config import WHISPER_CONFIG, WHISPER_WORKERS, WHISPER_DEFAULT_LANGUAGE
 
 logger = logging.getLogger("dental_assistant.whisper")
 
@@ -95,29 +95,32 @@ class LocalWhisper:
                 num_workers=num_workers,
             )
 
-    async def transcribe(self, audio_path: str) -> str:
+    async def transcribe(self, audio_path: str, language: Optional[str] = None) -> str:
         """
         Runs transcription in a worker thread.
-        """
-        # Ensure model exists / dependency exists before starting the thread
-        self._load_model_if_needed()
-        return await asyncio.to_thread(self._transcribe_sync, audio_path)
 
-    def _transcribe_sync(self, audio_path: str) -> str:
+        Args:
+            audio_path: Path to the audio file
+            language: Language code (e.g. "fr", "en"). Defaults to WHISPER_DEFAULT_LANGUAGE.
+        """
+        self._load_model_if_needed()
+        lang = language or WHISPER_DEFAULT_LANGUAGE
+        return await asyncio.to_thread(self._transcribe_sync, audio_path, lang)
+
+    def _transcribe_sync(self, audio_path: str, language: str = "fr") -> str:
         """
         Synchronous transcription with optimized parameters.
 
         Optimizations:
         - VAD filtering to skip silence (20-30% faster)
-        - French language forced (avoids detection overhead)
+        - Language hint avoids detection overhead
         - condition_on_previous_text=False for speed
         """
         assert self._model is not None  # guaranteed by _load_model_if_needed()
 
-        # Get optimized transcription parameters
         segments, info = self._model.transcribe(
             audio_path,
-            language=WHISPER_CONFIG["language"],
+            language=language,
             vad_filter=WHISPER_CONFIG["vad_filter"],
             vad_parameters=WHISPER_CONFIG["vad_parameters"],
             condition_on_previous_text=WHISPER_CONFIG["condition_on_previous_text"],
@@ -126,12 +129,9 @@ class LocalWhisper:
             no_speech_threshold=WHISPER_CONFIG["no_speech_threshold"],
         )
 
-        # Log detected language info for debugging
-        if info.language != "fr":
-            logger.debug(
-                "Audio language detected as %s (probability: %.2f), forcing French",
-                info.language,
-                info.language_probability
-            )
+        logger.debug(
+            "Transcription complete: detected=%s (prob=%.2f), requested=%s",
+            info.language, info.language_probability, language
+        )
 
         return " ".join(segment.text for segment in segments)

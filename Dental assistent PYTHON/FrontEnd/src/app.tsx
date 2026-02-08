@@ -21,11 +21,13 @@ async function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:9000";
+
 async function waitForHealth(timeoutMs = 10_000): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     try {
-      const res = await fetch("http://127.0.0.1:9000/health");
+      const res = await fetch(`${API_URL}/health`);
       if (res.ok) return;
     } catch {
       // ignore

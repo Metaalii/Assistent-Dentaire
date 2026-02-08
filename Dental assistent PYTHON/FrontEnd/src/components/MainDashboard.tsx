@@ -706,8 +706,8 @@ export default function MainDashboard() {
     setStreamingContent("");
 
     try {
-      // Step 1: Transcribe audio
-      const tr = await transcribeAudio(file);
+      // Step 1: Transcribe audio (pass UI language as transcription hint)
+      const tr = await transcribeAudio(file, language);
       setTranscript(tr.text);
 
       // Step 2: Generate summary with streaming for real-time feedback
@@ -723,11 +723,11 @@ export default function MainDashboard() {
         // onComplete: called when generation is finished
         (fullText) => {
           // Combine header + generated content + footer
-          const fullDocument = `${getDocumentHeader()}
+          const fullDocument = `${getDocumentHeader(language)}
 
 ${fullText}
 
-${getDocumentFooter()}`;
+${getDocumentFooter(language)}`;
           setDocument(fullDocument);
           setIsStreaming(false);
           setStreamingContent("");
