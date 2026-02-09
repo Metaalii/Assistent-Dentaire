@@ -4,6 +4,7 @@
 )]
 
 use std::{
+    collections::HashMap,
     net::TcpStream,
     sync::{Arc, Mutex},
     thread,
@@ -11,11 +12,11 @@ use std::{
 };
 
 use tauri::{Manager, RunEvent};
-use tauri::api::process::{Command, CommandEvent};
+use tauri::api::process::{Command, CommandChild, CommandEvent};
 use uuid::Uuid;
 
 struct AppState {
-    backend_process: Arc<Mutex<Option<tauri::api::process::Child>>>,
+    backend_process: Arc<Mutex<Option<CommandChild>>>,
     api_key: String,
 }
 
@@ -27,18 +28,23 @@ fn generate_api_key() -> String {
 
 /* ---------- BACKEND ---------- */
 
-fn start_backend(api_key: &str) -> tauri::api::process::Child {
-    let (mut rx, child) = Command::new_sidecar("dental-backend")
+fn start_backend(api_key: &str) -> CommandChild {
+    let mut env_vars = HashMap::new();
+    env_vars.insert("APP_API_KEY".to_string(), api_key.to_string());
+
+    let (mut rx, child) = Command::new_sidecar("binaries/dental-backend")
         .expect("Sidecar not found: dental-backend")
-        .env("APP_API_KEY", api_key)
+        .envs(env_vars)
         .spawn()
         .expect("Failed to start backend sidecar");
 
     // Optional: log backend output
     tauri::async_runtime::spawn(async move {
         while let Some(event) = rx.recv().await {
-            if let CommandEvent::Stderr(line) = event {
-                eprintln!("[backend] {line}");
+            match event {
+                CommandEvent::Stderr(line) => eprintln!("[backend] {line}"),
+                CommandEvent::Stdout(line) => println!("[backend] {line}"),
+                _ => {}
             }
         }
     });
@@ -85,11 +91,13 @@ fn main() {
         .run(|app_handle, event| {
             if let RunEvent::Exit = event {
                 let state = app_handle.state::<AppState>();
-                if let Ok(mut guard) = state.backend_process.lock() {
+                let process = state.backend_process.clone();
+                drop(state);
+                if let Ok(mut guard) = process.lock() {
                     if let Some(child) = guard.take() {
                         let _ = child.kill();
                     }
-                }
+                };
             }
         });
 }

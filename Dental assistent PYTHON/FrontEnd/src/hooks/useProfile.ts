@@ -10,14 +10,6 @@ export interface DentistProfile {
 
 const PROFILE_KEY = "dental-assistant-profile";
 
-const DEFAULT_PROFILE: DentistProfile = {
-  name: "",
-  title: "",
-  address: "",
-  phone: "",
-  email: "",
-};
-
 export function useProfile() {
   const [profile, setProfileState] = useState<DentistProfile | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);

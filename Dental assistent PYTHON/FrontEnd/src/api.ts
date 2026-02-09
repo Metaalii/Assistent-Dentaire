@@ -18,13 +18,14 @@ async function getApiKey(): Promise<string> {
 
   try {
     // Try Tauri invoke first (works in desktop app)
-    cachedKey = await invoke<string>("get_api_config");
-    return cachedKey!;
+    const key = await invoke<string>("get_api_config");
+    cachedKey = key;
+    return key;
   } catch {
     // Fallback to dev key when running in browser (local development)
     console.warn("Tauri not available, using development API key");
     cachedKey = DEV_API_KEY;
-    return cachedKey;
+    return DEV_API_KEY;
   }
 }
 
