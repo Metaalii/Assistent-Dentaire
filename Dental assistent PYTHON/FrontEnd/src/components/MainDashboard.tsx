@@ -134,7 +134,7 @@ const UploadZone: React.FC<UploadZoneProps> = React.memo(({
       hover={!isLoading}
     >
       {/* Gradient background pattern */}
-      <div className="absolute inset-0 bg-gradient-to-br from-[#f0f7fc]/50 via-white to-[#effcfb]/50 pointer-events-none" />
+      <div className="absolute inset-0 bg-gradient-to-br from-[#f0f7fc]/50 via-white to-[#effcfb]/50 dark:from-[#1e293b]/50 dark:via-[#1e293b] dark:to-[#1e293b]/50 pointer-events-none" />
 
       {/* Decorative circles */}
       <div className="absolute -top-20 -right-20 w-40 h-40 bg-gradient-to-br from-[#2d96c6]/10 to-transparent rounded-full blur-2xl pointer-events-none" />
@@ -172,12 +172,12 @@ const UploadZone: React.FC<UploadZoneProps> = React.memo(({
           </div>
 
           {/* Title */}
-          <h3 className="text-xl font-semibold text-[#1e293b] mb-2">
+          <h3 className="text-xl font-semibold text-[#1e293b] dark:text-white mb-2">
             {isDragActive ? t("dropAudioHere") : t("uploadAudioRecording")}
           </h3>
 
           {/* Description */}
-          <p className="text-[#64748b] mb-6 text-center max-w-md">
+          <p className="text-[#64748b] dark:text-[#94a3b8] mb-6 text-center max-w-md">
             {t("dragAndDropAudio")}
           </p>
 
@@ -202,9 +202,9 @@ const UploadZone: React.FC<UploadZoneProps> = React.memo(({
 
           {/* Selected file info */}
           {fileName && (
-            <div className="mt-4 flex items-center gap-2 px-4 py-2 bg-[#f0fdf4] rounded-lg border border-[#bbf7d0]">
+            <div className="mt-4 flex items-center gap-2 px-4 py-2 bg-[#f0fdf4] dark:bg-[#14332a] rounded-lg border border-[#bbf7d0] dark:border-[#276749]">
               <FileAudioIcon className="text-[#10b981]" size={16} />
-              <span className="text-sm font-medium text-[#166534]">{fileName}</span>
+              <span className="text-sm font-medium text-[#166534] dark:text-[#6ee7b7]">{fileName}</span>
             </div>
           )}
 
@@ -226,7 +226,7 @@ const UploadZone: React.FC<UploadZoneProps> = React.memo(({
       </CardBody>
 
       {/* Max size info */}
-      <div className="px-6 py-3 bg-[#f8fafc] border-t border-[#e2e8f0] text-center">
+      <div className="px-6 py-3 bg-[#f8fafc] dark:bg-[#0f172a] border-t border-[#e2e8f0] dark:border-[#334155] text-center">
         <p className="text-xs text-[#94a3b8]">
           {t("maxFileSize")}
         </p>
@@ -414,7 +414,7 @@ const LiveRecorder: React.FC<LiveRecorderProps> = ({ onRecordingComplete, isProc
       hover={!isProcessing}
     >
       {/* Gradient background */}
-      <div className="absolute inset-0 bg-gradient-to-br from-[#f0f7fc]/50 via-white to-[#effcfb]/50 pointer-events-none" />
+      <div className="absolute inset-0 bg-gradient-to-br from-[#f0f7fc]/50 via-white to-[#effcfb]/50 dark:from-[#1e293b]/50 dark:via-[#1e293b] dark:to-[#1e293b]/50 pointer-events-none" />
 
       {/* Decorative circles */}
       <div className="absolute -top-20 -left-20 w-40 h-40 bg-gradient-to-br from-[#2d96c6]/10 to-transparent rounded-full blur-2xl pointer-events-none" />
@@ -447,7 +447,7 @@ const LiveRecorder: React.FC<LiveRecorderProps> = ({ onRecordingComplete, isProc
           </div>
 
           {/* Title */}
-          <h3 className="text-xl font-semibold text-[#1e293b] mb-2">
+          <h3 className="text-xl font-semibold text-[#1e293b] dark:text-white mb-2">
             {isRecording
               ? isPaused ? t("recordingPaused") : t("recordingInProgress")
               : audioUrl
@@ -458,14 +458,14 @@ const LiveRecorder: React.FC<LiveRecorderProps> = ({ onRecordingComplete, isProc
 
           {/* Duration display */}
           {(isRecording || audioUrl) && (
-            <div className="text-3xl font-mono font-bold text-[#1e293b] mb-4">
+            <div className="text-3xl font-mono font-bold text-[#1e293b] dark:text-white mb-4">
               {formatDuration(duration)}
             </div>
           )}
 
           {/* Description */}
           {!isRecording && !audioUrl && (
-            <p className="text-[#64748b] mb-6 text-center max-w-md">
+            <p className="text-[#64748b] dark:text-[#94a3b8] mb-6 text-center max-w-md">
               {t("recordFromMicrophone")}
             </p>
           )}
@@ -561,7 +561,7 @@ const LiveRecorder: React.FC<LiveRecorderProps> = ({ onRecordingComplete, isProc
       </CardBody>
 
       {/* Info footer */}
-      <div className="px-6 py-3 bg-[#f8fafc] border-t border-[#e2e8f0] text-center">
+      <div className="px-6 py-3 bg-[#f8fafc] dark:bg-[#0f172a] border-t border-[#e2e8f0] dark:border-[#334155] text-center">
         <p className="text-xs text-[#94a3b8]">
           {t("localProcessing")}
         </p>
@@ -581,10 +581,10 @@ const ProcessingIndicator: React.FC = React.memo(() => {
       <CardBody className="py-10">
         <div className="flex flex-col items-center">
           <MedicalLoader />
-          <h3 className="mt-6 text-lg font-semibold text-[#1e293b]">
+          <h3 className="mt-6 text-lg font-semibold text-[#1e293b] dark:text-white">
             {t("processingAudioTitle")}
           </h3>
-          <p className="mt-2 text-[#64748b] text-center max-w-md">
+          <p className="mt-2 text-[#64748b] dark:text-[#94a3b8] text-center max-w-md">
             {t("processingAudioDesc")}
           </p>
 
@@ -596,9 +596,9 @@ const ProcessingIndicator: React.FC = React.memo(() => {
               </div>
               <span className="text-sm font-medium text-[#2d96c6]">{t("transcribingStep")}</span>
             </div>
-            <div className="w-8 h-0.5 bg-[#e2e8f0] rounded" />
+            <div className="w-8 h-0.5 bg-[#e2e8f0] dark:bg-[#334155] rounded" />
             <div className="flex items-center gap-2 opacity-50">
-              <div className="w-8 h-8 rounded-lg bg-[#e2e8f0] flex items-center justify-center">
+              <div className="w-8 h-8 rounded-lg bg-[#e2e8f0] dark:bg-[#334155] flex items-center justify-center">
                 <SparklesIcon className="text-[#94a3b8]" size={16} />
               </div>
               <span className="text-sm font-medium text-[#94a3b8]">{t("summarizingStep")}</span>
@@ -638,8 +638,8 @@ const ResultCard: React.FC<ResultCardProps> = React.memo(({
     <Card className="h-full flex flex-col" hover>
       <CardHeader icon={icon}>
         <div>
-          <h2 className="font-semibold text-[#1e293b]">{title}</h2>
-          <p className="text-xs text-[#64748b]">
+          <h2 className="font-semibold text-[#1e293b] dark:text-white">{title}</h2>
+          <p className="text-xs text-[#64748b] dark:text-[#94a3b8]">
             {isPending ? t("processing") : t("generatedByAI")}
           </p>
         </div>
@@ -661,7 +661,7 @@ const ResultCard: React.FC<ResultCardProps> = React.memo(({
           </div>
         ) : (
           <div className="prose prose-sm max-w-none">
-            <p className="text-[#475569] leading-relaxed whitespace-pre-wrap">
+            <p className="text-[#475569] dark:text-[#cbd5e1] leading-relaxed whitespace-pre-wrap">
               {content}
             </p>
           </div>
@@ -1088,8 +1088,8 @@ ${getDocumentFooter(language)}`;
                   <CardHeader icon={<SparklesIcon className="text-white" size={20} />}>
                     <div className="flex items-center gap-3">
                       <div>
-                        <h2 className="font-semibold text-[#1e293b]">{t("generatingSmartNote")}</h2>
-                        <p className="text-xs text-[#64748b]">{t("aiWriting")}</p>
+                        <h2 className="font-semibold text-[#1e293b] dark:text-white">{t("generatingSmartNote")}</h2>
+                        <p className="text-xs text-[#64748b] dark:text-[#94a3b8]">{t("aiWriting")}</p>
                       </div>
                       <div className="flex gap-1">
                         {[0, 1, 2].map((i) => (
@@ -1103,8 +1103,8 @@ ${getDocumentFooter(language)}`;
                     </div>
                   </CardHeader>
                   <CardBody>
-                    <div className="min-h-[200px] p-4 bg-[#f8fafc] rounded-xl border-2 border-[#e2e8f0]">
-                      <pre className="whitespace-pre-wrap text-[#1e293b] font-mono text-sm leading-relaxed">
+                    <div className="min-h-[200px] p-4 bg-[#f8fafc] dark:bg-[#0f172a] rounded-xl border-2 border-[#e2e8f0] dark:border-[#334155]">
+                      <pre className="whitespace-pre-wrap text-[#1e293b] dark:text-[#e2e8f0] font-mono text-sm leading-relaxed">
                         {streamingContent}
                         <span className="inline-block w-2 h-4 bg-[#2d96c6] animate-pulse ml-1" />
                       </pre>
@@ -1120,15 +1120,15 @@ ${getDocumentFooter(language)}`;
                 <Card className="overflow-hidden">
                   <CardHeader icon={<DocumentIcon className="text-white" size={20} />}>
                     <div>
-                      <h2 className="font-semibold text-[#1e293b]">{t("generatedDocument")}</h2>
-                      <p className="text-xs text-[#64748b]">{t("editableBeforeExport")}</p>
+                      <h2 className="font-semibold text-[#1e293b] dark:text-white">{t("generatedDocument")}</h2>
+                      <p className="text-xs text-[#64748b] dark:text-[#94a3b8]">{t("editableBeforeExport")}</p>
                     </div>
                   </CardHeader>
                   <CardBody>
                     <textarea
                       value={document}
                       onChange={(e) => setDocument(e.target.value)}
-                      className="w-full h-96 p-4 border-2 border-[#e2e8f0] rounded-xl bg-white text-[#1e293b] font-mono text-sm leading-relaxed resize-y focus:border-[#2d96c6] focus:ring-2 focus:ring-[#2d96c6]/20 outline-none"
+                      className="w-full h-96 p-4 border-2 border-[#e2e8f0] dark:border-[#334155] rounded-xl bg-white dark:bg-[#0f172a] text-[#1e293b] dark:text-[#e2e8f0] font-mono text-sm leading-relaxed resize-y focus:border-[#2d96c6] focus:ring-2 focus:ring-[#2d96c6]/20 outline-none"
                       placeholder={String(t("documentPlaceholder"))}
                     />
                   </CardBody>
@@ -1169,21 +1169,21 @@ ${getDocumentFooter(language)}`;
               <section className="text-center py-8">
                 <div className="flex justify-center gap-4">
                   <div className="flex items-center gap-2 text-[#94a3b8]">
-                    <div className="w-8 h-8 rounded-lg bg-[#f1f5f9] flex items-center justify-center">
+                    <div className="w-8 h-8 rounded-lg bg-[#f1f5f9] dark:bg-[#334155] flex items-center justify-center">
                       <span className="text-sm font-bold">1</span>
                     </div>
                     <span className="text-sm">{t("step1Upload")}</span>
                   </div>
-                  <div className="w-8 h-0.5 bg-[#e2e8f0] self-center rounded" />
+                  <div className="w-8 h-0.5 bg-[#e2e8f0] dark:bg-[#334155] self-center rounded" />
                   <div className="flex items-center gap-2 text-[#94a3b8]">
-                    <div className="w-8 h-8 rounded-lg bg-[#f1f5f9] flex items-center justify-center">
+                    <div className="w-8 h-8 rounded-lg bg-[#f1f5f9] dark:bg-[#334155] flex items-center justify-center">
                       <span className="text-sm font-bold">2</span>
                     </div>
                     <span className="text-sm">{t("step2Transcription")}</span>
                   </div>
-                  <div className="w-8 h-0.5 bg-[#e2e8f0] self-center rounded" />
+                  <div className="w-8 h-0.5 bg-[#e2e8f0] dark:bg-[#334155] self-center rounded" />
                   <div className="flex items-center gap-2 text-[#94a3b8]">
-                    <div className="w-8 h-8 rounded-lg bg-[#f1f5f9] flex items-center justify-center">
+                    <div className="w-8 h-8 rounded-lg bg-[#f1f5f9] dark:bg-[#334155] flex items-center justify-center">
                       <span className="text-sm font-bold">3</span>
                     </div>
                     <span className="text-sm">{t("step3Document")}</span>

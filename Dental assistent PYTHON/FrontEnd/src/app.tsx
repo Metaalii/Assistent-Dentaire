@@ -65,7 +65,7 @@ const SplashScreen: React.FC = () => {
           </div>
 
           {/* Heartbeat indicator */}
-          <div className="absolute -bottom-2 -right-2 w-10 h-10 rounded-full bg-white shadow-lg flex items-center justify-center">
+          <div className="absolute -bottom-2 -right-2 w-10 h-10 rounded-full bg-white dark:bg-[#1e293b] shadow-lg flex items-center justify-center">
             <HeartPulseIcon className="text-[#28b5ad] animate-pulse" size={20} />
           </div>
         </div>
@@ -109,7 +109,7 @@ const ErrorScreen: React.FC<ErrorScreenProps> = ({ message, onRetry }) => {
   const tips = t("troubleshootingTips") as string[];
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#fef2f2] via-[#fee2e2] to-[#fecaca] relative overflow-hidden">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#fef2f2] via-[#fee2e2] to-[#fecaca] dark:from-[#1a0a0a] dark:via-[#1e1010] dark:to-[#1a0a0a] relative overflow-hidden">
       {/* Background pattern */}
       <div className="absolute inset-0">
         <div className="absolute top-20 right-20 w-64 h-64 bg-red-500/10 rounded-full blur-3xl" />
@@ -118,26 +118,26 @@ const ErrorScreen: React.FC<ErrorScreenProps> = ({ message, onRetry }) => {
 
       {/* Main content */}
       <div className="relative z-10 max-w-md w-full mx-4">
-        <div className="bg-white/90 backdrop-blur-xl rounded-3xl shadow-2xl shadow-red-500/10 border border-red-100 p-8 text-center">
+        <div className="bg-white/90 dark:bg-[#1e293b]/90 backdrop-blur-xl rounded-3xl shadow-2xl shadow-red-500/10 border border-red-100 dark:border-red-900/50 p-8 text-center">
           {/* Error icon */}
           <div className="mx-auto w-20 h-20 rounded-2xl bg-gradient-to-br from-red-500 to-red-600 shadow-lg shadow-red-500/30 flex items-center justify-center mb-6">
             <AlertCircleIcon className="text-white" size={40} />
           </div>
 
           {/* Error title */}
-          <h2 className="text-2xl font-bold text-[#1e293b] mb-3">
+          <h2 className="text-2xl font-bold text-[#1e293b] dark:text-white mb-3">
             {t("connectionFailed")}
           </h2>
 
           {/* Error message */}
-          <p className="text-[#64748b] mb-6 leading-relaxed">
+          <p className="text-[#64748b] dark:text-[#94a3b8] mb-6 leading-relaxed">
             {message}
           </p>
 
           {/* Troubleshooting tips */}
-          <div className="bg-red-50 rounded-xl p-4 mb-6 text-left">
-            <p className="text-sm font-semibold text-red-800 mb-2">{t("troubleshooting")}</p>
-            <ul className="text-sm text-red-700 space-y-1">
+          <div className="bg-red-50 dark:bg-red-950/50 rounded-xl p-4 mb-6 text-left">
+            <p className="text-sm font-semibold text-red-800 dark:text-red-300 mb-2">{t("troubleshooting")}</p>
+            <ul className="text-sm text-red-700 dark:text-red-400 space-y-1">
               {tips.map((tip, index) => (
                 <li key={index} className="flex items-start gap-2">
                   <span className="text-red-400 mt-0.5">&bull;</span>
@@ -248,7 +248,7 @@ function AppContent() {
 
   return (
     <ErrorBoundary>
-      <div className="min-h-screen bg-gradient-to-br from-[#f8fafc] via-[#f0f7fc] to-[#f8fafc]">
+      <div className="min-h-screen bg-gradient-to-br from-[#f8fafc] via-[#f0f7fc] to-[#f8fafc] dark:from-[#0f172a] dark:via-[#1e293b] dark:to-[#0f172a]">
         <MainDashboard />
       </div>
     </ErrorBoundary>
