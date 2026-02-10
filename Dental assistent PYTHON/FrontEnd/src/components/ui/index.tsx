@@ -42,12 +42,12 @@ export const Button: React.FC<ButtonProps> = ({
       active:translate-y-0
     `,
     secondary: `
-      text-[#1a6289]
-      bg-[#f0f7fc]
-      border-[1.5px] border-[#bde0f3]
-      hover:bg-[#e1f0f9]
-      hover:border-[#8acae9]
-      hover:text-[#1a5271]
+      text-[#1a6289] dark:text-[#8acae9]
+      bg-[#f0f7fc] dark:bg-[#1e3a5f]
+      border-[1.5px] border-[#bde0f3] dark:border-[#2d6a8e]
+      hover:bg-[#e1f0f9] dark:hover:bg-[#234b6e]
+      hover:border-[#8acae9] dark:hover:border-[#52b1db]
+      hover:text-[#1a5271] dark:hover:text-[#bde0f3]
       focus:ring-[#8acae9]
     `,
     accent: `
@@ -61,12 +61,12 @@ export const Button: React.FC<ButtonProps> = ({
       active:translate-y-0
     `,
     ghost: `
-      text-[#475569]
+      text-[#475569] dark:text-[#94a3b8]
       bg-transparent
-      border-[1.5px] border-[#e2e8f0]
-      hover:bg-[#f8fafc]
-      hover:border-[#cbd5e1]
-      hover:text-[#334155]
+      border-[1.5px] border-[#e2e8f0] dark:border-[#334155]
+      hover:bg-[#f8fafc] dark:hover:bg-[#1e293b]
+      hover:border-[#cbd5e1] dark:hover:border-[#475569]
+      hover:text-[#334155] dark:hover:text-[#e2e8f0]
       focus:ring-[#94a3b8]
     `,
     danger: `
@@ -125,18 +125,18 @@ export const Card: React.FC<CardProps> = ({
 }) => {
   const baseStyles = glass
     ? `
-      bg-white/90 backdrop-blur-xl
-      border border-white/80
+      bg-white/90 dark:bg-[#1e293b]/90 backdrop-blur-xl
+      border border-white/80 dark:border-[#334155]/80
       rounded-2xl shadow-md
     `
     : `
-      bg-white
-      border border-[#e2e8f0]
+      bg-white dark:bg-[#1e293b]
+      border border-[#e2e8f0] dark:border-[#334155]
       rounded-2xl shadow-sm
     `;
 
   const hoverStyles = hover
-    ? "transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 hover:border-[#bde0f3]"
+    ? "transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 hover:border-[#bde0f3] dark:hover:border-[#475569]"
     : "";
 
   return (
@@ -164,8 +164,8 @@ export const CardHeader: React.FC<CardHeaderProps> = ({
   <div
     className={`
       flex items-center gap-3 px-5 py-4
-      bg-gradient-to-r from-[#f8fafc]/80 to-white
-      border-b border-[#f1f5f9]
+      bg-gradient-to-r from-[#f8fafc]/80 to-white dark:from-[#1e293b] dark:to-[#1e293b]
+      border-b border-[#f1f5f9] dark:border-[#334155]
       rounded-t-2xl
       ${className}
     `}
@@ -260,7 +260,7 @@ export const MedicalLoader: React.FC<MedicalLoaderProps> = ({
       />
     </div>
     {text && (
-      <p className="text-[#64748b] font-medium animate-pulse">{text}</p>
+      <p className="text-[#64748b] dark:text-[#94a3b8] font-medium animate-pulse">{text}</p>
     )}
   </div>
 );
@@ -297,7 +297,7 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
       <div
         className={`
           w-full ${sizes[size]}
-          bg-[#f1f5f9]
+          bg-[#f1f5f9] dark:bg-[#334155]
           rounded-full
           overflow-hidden
         `}
@@ -323,7 +323,7 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
         </div>
       </div>
       {showLabel && (
-        <div className="mt-2 text-sm text-[#64748b] font-medium text-right">
+        <div className="mt-2 text-sm text-[#64748b] dark:text-[#94a3b8] font-medium text-right">
           {Math.round(percentage)}%
         </div>
       )}
@@ -350,24 +350,24 @@ export const Alert: React.FC<AlertProps> = ({
 }) => {
   const variants = {
     info: `
-      bg-gradient-to-r from-[#eff6ff] to-[#eff6ff]/50
-      border border-[#bfdbfe]
-      text-[#1e40af]
+      bg-gradient-to-r from-[#eff6ff] to-[#eff6ff]/50 dark:from-[#1e3a5f] dark:to-[#1e3a5f]/50
+      border border-[#bfdbfe] dark:border-[#2d6a8e]
+      text-[#1e40af] dark:text-[#93c5fd]
     `,
     success: `
-      bg-gradient-to-r from-[#ecfdf5] to-[#ecfdf5]/50
-      border border-[#a7f3d0]
-      text-[#166534]
+      bg-gradient-to-r from-[#ecfdf5] to-[#ecfdf5]/50 dark:from-[#14332a] dark:to-[#14332a]/50
+      border border-[#a7f3d0] dark:border-[#276749]
+      text-[#166534] dark:text-[#6ee7b7]
     `,
     warning: `
-      bg-gradient-to-r from-[#fffbeb] to-[#fffbeb]/50
-      border border-[#fde68a]
-      text-[#92400e]
+      bg-gradient-to-r from-[#fffbeb] to-[#fffbeb]/50 dark:from-[#3b2e10] dark:to-[#3b2e10]/50
+      border border-[#fde68a] dark:border-[#92400e]
+      text-[#92400e] dark:text-[#fcd34d]
     `,
     error: `
-      bg-gradient-to-r from-[#fef2f2] to-[#fef2f2]/50
-      border border-[#fecaca]
-      text-[#991b1b]
+      bg-gradient-to-r from-[#fef2f2] to-[#fef2f2]/50 dark:from-[#3b1515] dark:to-[#3b1515]/50
+      border border-[#fecaca] dark:border-[#991b1b]
+      text-[#991b1b] dark:text-[#fca5a5]
     `,
   };
 
@@ -402,12 +402,12 @@ export const Badge: React.FC<BadgeProps> = ({
   className = "",
 }) => {
   const variants = {
-    primary: "text-[#1a6289] bg-[#e1f0f9]",
-    accent: "text-[#1e7574] bg-[#d7f7f5]",
-    success: "text-[#166534] bg-[#dcfce7]",
-    warning: "text-[#92400e] bg-[#fef3c7]",
-    error: "text-[#991b1b] bg-[#fee2e2]",
-    neutral: "text-[#475569] bg-[#f1f5f9]",
+    primary: "text-[#1a6289] bg-[#e1f0f9] dark:text-[#8acae9] dark:bg-[#1e3a5f]",
+    accent: "text-[#1e7574] bg-[#d7f7f5] dark:text-[#43cec6] dark:bg-[#163332]",
+    success: "text-[#166534] bg-[#dcfce7] dark:text-[#6ee7b7] dark:bg-[#14332a]",
+    warning: "text-[#92400e] bg-[#fef3c7] dark:text-[#fcd34d] dark:bg-[#3b2e10]",
+    error: "text-[#991b1b] bg-[#fee2e2] dark:text-[#fca5a5] dark:bg-[#3b1515]",
+    neutral: "text-[#475569] bg-[#f1f5f9] dark:text-[#94a3b8] dark:bg-[#334155]",
   };
 
   return (
@@ -434,7 +434,7 @@ interface DividerProps {
 }
 
 export const Divider: React.FC<DividerProps> = ({ className = "" }) => (
-  <hr className={`border-t border-[#e2e8f0] ${className}`} />
+  <hr className={`border-t border-[#e2e8f0] dark:border-[#334155] ${className}`} />
 );
 
 // ============================================
@@ -463,7 +463,7 @@ export const Skeleton: React.FC<SkeletonProps> = ({
   return (
     <div
       className={`
-        bg-gradient-to-r from-[#f1f5f9] via-[#e2e8f0] to-[#f1f5f9]
+        bg-gradient-to-r from-[#f1f5f9] via-[#e2e8f0] to-[#f1f5f9] dark:from-[#334155] dark:via-[#475569] dark:to-[#334155]
         bg-[length:200%_100%]
         animate-[shimmer_1.5s_infinite]
         ${variants[variant]}
@@ -525,7 +525,7 @@ export const Tooltip: React.FC<TooltipProps> = ({
       className="
         absolute bottom-full left-1/2 -translate-x-1/2 mb-2
         px-3 py-1.5 rounded-lg
-        bg-[#1e293b] text-white text-xs font-medium
+        bg-[#1e293b] dark:bg-[#f1f5f9] text-white dark:text-[#1e293b] text-xs font-medium
         opacity-0 invisible group-hover:opacity-100 group-hover:visible
         transition-all duration-200
         whitespace-nowrap
@@ -534,7 +534,7 @@ export const Tooltip: React.FC<TooltipProps> = ({
       "
     >
       {content}
-      <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-[#1e293b]" />
+      <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-[#1e293b] dark:border-t-[#f1f5f9]" />
     </div>
   </div>
 );
@@ -556,7 +556,7 @@ export const Input: React.FC<InputProps> = ({
 }) => (
   <div className="w-full">
     {label && (
-      <label className="block text-sm font-medium text-[#334155] mb-1.5">
+      <label className="block text-sm font-medium text-[#334155] dark:text-[#e2e8f0] mb-1.5">
         {label}
       </label>
     )}
@@ -564,17 +564,17 @@ export const Input: React.FC<InputProps> = ({
       className={`
         w-full px-4 py-2.5
         rounded-xl
-        border-[1.5px] ${error ? 'border-red-300' : 'border-[#e2e8f0]'}
-        bg-white
-        text-[#1e293b] placeholder-[#94a3b8]
-        focus:border-[#52b1db] focus:ring-2 focus:ring-[#f0f7fc]
+        border-[1.5px] ${error ? 'border-red-300 dark:border-red-700' : 'border-[#e2e8f0] dark:border-[#334155]'}
+        bg-white dark:bg-[#0f172a]
+        text-[#1e293b] dark:text-[#e2e8f0] placeholder-[#94a3b8] dark:placeholder-[#64748b]
+        focus:border-[#52b1db] focus:ring-2 focus:ring-[#f0f7fc] dark:focus:ring-[#1e3a5f]
         outline-none transition-all duration-200
         ${className}
       `}
       {...props}
     />
     {error && (
-      <p className="mt-1.5 text-sm text-red-600">{error}</p>
+      <p className="mt-1.5 text-sm text-red-600 dark:text-red-400">{error}</p>
     )}
   </div>
 );
@@ -596,9 +596,9 @@ export const IconButton: React.FC<IconButtonProps> = ({
   ...props
 }) => {
   const variants = {
-    default: "text-[#64748b] hover:text-[#2d96c6] hover:bg-[#f0f7fc]",
-    primary: "text-[#2d96c6] hover:text-[#1e7aa8] hover:bg-[#e1f0f9]",
-    danger: "text-[#ef4444] hover:text-[#dc2626] hover:bg-[#fef2f2]",
+    default: "text-[#64748b] hover:text-[#2d96c6] hover:bg-[#f0f7fc] dark:text-[#94a3b8] dark:hover:text-[#52b1db] dark:hover:bg-[#1e3a5f]",
+    primary: "text-[#2d96c6] hover:text-[#1e7aa8] hover:bg-[#e1f0f9] dark:text-[#52b1db] dark:hover:text-[#8acae9] dark:hover:bg-[#1e3a5f]",
+    danger: "text-[#ef4444] hover:text-[#dc2626] hover:bg-[#fef2f2] dark:text-[#f87171] dark:hover:text-[#fca5a5] dark:hover:bg-[#3b1515]",
   };
 
   const sizes = {

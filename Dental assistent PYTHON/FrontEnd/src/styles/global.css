@@ -183,6 +183,12 @@ body {
   line-height: var(--leading-normal);
 }
 
+.dark body,
+html.dark body {
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
 /* ============================================
    KEYFRAME ANIMATIONS
    Refined, professional animations
@@ -971,12 +977,34 @@ body {
   scrollbar-color: var(--color-neutral-300) var(--color-neutral-100);
 }
 
+/* Dark mode scrollbar */
+.dark ::-webkit-scrollbar-track {
+  background: #1e293b;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #475569;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+.dark * {
+  scrollbar-color: #475569 #1e293b;
+}
+
 /* ============================================
    SELECTION
    ============================================ */
 ::selection {
   background: var(--color-primary-200);
   color: var(--color-primary-900);
+}
+
+.dark ::selection {
+  background: #1e3a5f;
+  color: #e2e8f0;
 }
 
 /* ============================================

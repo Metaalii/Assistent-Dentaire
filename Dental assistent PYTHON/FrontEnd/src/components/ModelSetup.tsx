@@ -53,7 +53,7 @@ const StepIndicator: React.FC<StepIndicatorProps> = ({ currentStep, steps }) => 
                   ? "bg-gradient-to-br from-[#10b981] to-[#059669] text-white shadow-lg shadow-green-500/30"
                   : index === currentStep
                   ? "bg-gradient-to-br from-[#2d96c6] to-[#28b5ad] text-white shadow-lg shadow-[#2d96c6]/30"
-                  : "bg-[#e2e8f0] text-[#94a3b8]"
+                  : "bg-[#e2e8f0] dark:bg-[#334155] text-[#94a3b8]"
               }
             `}
           >
@@ -68,7 +68,7 @@ const StepIndicator: React.FC<StepIndicatorProps> = ({ currentStep, steps }) => 
               text-sm font-medium hidden sm:block
               ${
                 index <= currentStep
-                  ? "text-[#1e293b]"
+                  ? "text-[#1e293b] dark:text-white"
                   : "text-[#94a3b8]"
               }
             `}
@@ -80,7 +80,7 @@ const StepIndicator: React.FC<StepIndicatorProps> = ({ currentStep, steps }) => 
           <div
             className={`
               w-8 h-0.5 rounded-full transition-all duration-300
-              ${index < currentStep ? "bg-[#10b981]" : "bg-[#e2e8f0]"}
+              ${index < currentStep ? "bg-[#10b981]" : "bg-[#e2e8f0] dark:bg-[#334155]"}
             `}
           />
         )}
@@ -111,24 +111,24 @@ const HardwareInfoCard: React.FC<HardwareInfoCardProps> = ({ hardware }) => {
   };
 
   return (
-    <div className="bg-gradient-to-br from-[#f8fafc] to-[#f0f7fc] rounded-2xl p-5 border border-[#e2e8f0]">
+    <div className="bg-gradient-to-br from-[#f8fafc] to-[#f0f7fc] dark:from-[#0f172a] dark:to-[#1e293b] rounded-2xl p-5 border border-[#e2e8f0] dark:border-[#334155]">
       <div className="flex items-start gap-4">
         <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#2d96c6] to-[#28b5ad] shadow-lg shadow-[#2d96c6]/20 flex items-center justify-center flex-shrink-0">
           <CpuIcon className="text-white" size={24} />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="font-semibold text-[#1e293b]">{t("hardwareProfile")}</h3>
+            <h3 className="font-semibold text-[#1e293b] dark:text-white">{t("hardwareProfile")}</h3>
             <Badge variant={profile.variant}>{profile.label}</Badge>
           </div>
-          <p className="mt-2 text-sm text-[#64748b]">
+          <p className="mt-2 text-sm text-[#64748b] dark:text-[#94a3b8]">
             {t("recommendedModel")}:{" "}
-            <span className="font-medium text-[#334155]">
+            <span className="font-medium text-[#334155] dark:text-[#e2e8f0]">
               {hardware.recommended_model}
             </span>
           </p>
           {hardware.download_url && (
-            <p className="mt-1 text-xs text-[#94a3b8] truncate">
+            <p className="mt-1 text-xs text-[#94a3b8] dark:text-[#64748b] truncate">
               Source: {hardware.download_url}
             </p>
           )}
@@ -317,7 +317,7 @@ export default function ModelSetup({ onReady }: Props) {
     <Card glass className="text-center">
       <CardBody className="py-12">
         <MedicalLoader text={t("analyzingHardware") as string} />
-        <p className="mt-6 text-sm text-[#94a3b8]">
+        <p className="mt-6 text-sm text-[#94a3b8] dark:text-[#64748b]">
           {t("systemRequirements")}
         </p>
       </CardBody>
@@ -387,8 +387,8 @@ export default function ModelSetup({ onReady }: Props) {
           <span
             className={`text-xs font-semibold px-2 py-1 rounded-full ${
               downloadPhase === "whisper"
-                ? "bg-[#f0f7fc] text-[#2d96c6]"
-                : "bg-[#f0fdf4] text-[#10b981]"
+                ? "bg-[#f0f7fc] dark:bg-[#1e3a5f] text-[#2d96c6] dark:text-[#52b1db]"
+                : "bg-[#f0fdf4] dark:bg-[#14332a] text-[#10b981] dark:text-[#6ee7b7]"
             }`}
           >
             {downloadPhase === "whisper" ? "1/2 — Whisper (speech)" : "2/2 — LLM (AI)"}
@@ -398,7 +398,7 @@ export default function ModelSetup({ onReady }: Props) {
         {/* Progress section */}
         <div>
           <div className="flex items-center justify-between mb-3">
-            <span className="text-sm font-medium text-[#334155]">
+            <span className="text-sm font-medium text-[#334155] dark:text-[#e2e8f0]">
               {downloadPhase === "whisper" ? "Whisper model" : t("downloading")}
             </span>
             <span className="text-sm font-bold text-[#2d96c6]">{progress}%</span>
@@ -418,7 +418,7 @@ export default function ModelSetup({ onReady }: Props) {
 
         {/* Download stats */}
         <div className="grid grid-cols-2 gap-4">
-          <div className="bg-[#f8fafc] rounded-xl p-4 text-center">
+          <div className="bg-[#f8fafc] dark:bg-[#0f172a] rounded-xl p-4 text-center">
             <p className="text-2xl font-bold text-[#2d96c6]">
               {totalMB > 0
                 ? `${downloadedMB} / ${totalMB} MB`
@@ -426,7 +426,7 @@ export default function ModelSetup({ onReady }: Props) {
             </p>
             <p className="text-xs text-[#94a3b8] mt-1">{t("downloadSize")}</p>
           </div>
-          <div className="bg-[#f8fafc] rounded-xl p-4 text-center">
+          <div className="bg-[#f8fafc] dark:bg-[#0f172a] rounded-xl p-4 text-center">
             <p className="text-2xl font-bold text-[#28b5ad]">{progress}%</p>
             <p className="text-xs text-[#94a3b8] mt-1">{t("optimal")}</p>
           </div>
@@ -457,23 +457,23 @@ export default function ModelSetup({ onReady }: Props) {
 
         {/* Features */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="bg-[#f0fdf4] rounded-xl p-4 text-center border border-[#bbf7d0]">
+          <div className="bg-[#f0fdf4] dark:bg-[#14332a] rounded-xl p-4 text-center border border-[#bbf7d0] dark:border-[#276749]">
             <div className="w-10 h-10 mx-auto rounded-xl bg-gradient-to-br from-[#10b981] to-[#059669] flex items-center justify-center mb-3">
               <CheckCircleIcon className="text-white" size={20} />
             </div>
-            <p className="text-sm font-semibold text-[#166534]">100% Private</p>
+            <p className="text-sm font-semibold text-[#166534] dark:text-[#6ee7b7]">100% Private</p>
           </div>
-          <div className="bg-[#f0f7fc] rounded-xl p-4 text-center border border-[#bde0f3]">
+          <div className="bg-[#f0f7fc] dark:bg-[#1e3a5f] rounded-xl p-4 text-center border border-[#bde0f3] dark:border-[#2d6a8e]">
             <div className="w-10 h-10 mx-auto rounded-xl bg-gradient-to-br from-[#2d96c6] to-[#1e7aa8] flex items-center justify-center mb-3">
               <CpuIcon className="text-white" size={20} />
             </div>
-            <p className="text-sm font-semibold text-[#1a5271]">Offline Ready</p>
+            <p className="text-sm font-semibold text-[#1a5271] dark:text-[#8acae9]">Offline Ready</p>
           </div>
-          <div className="bg-[#effcfb] rounded-xl p-4 text-center border border-[#b3f0ec]">
+          <div className="bg-[#effcfb] dark:bg-[#163332] rounded-xl p-4 text-center border border-[#b3f0ec] dark:border-[#1e7574]">
             <div className="w-10 h-10 mx-auto rounded-xl bg-gradient-to-br from-[#28b5ad] to-[#1f9290] flex items-center justify-center mb-3">
               <ToothIcon className="text-white" size={20} />
             </div>
-            <p className="text-sm font-semibold text-[#1d4d4c]">Medical Grade</p>
+            <p className="text-sm font-semibold text-[#1d4d4c] dark:text-[#43cec6]">Medical Grade</p>
           </div>
         </div>
 
@@ -503,7 +503,7 @@ export default function ModelSetup({ onReady }: Props) {
   // MAIN RENDER
   // ============================================
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#f8fafc] via-[#f0f7fc] to-[#effcfb] p-4 relative overflow-hidden">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#f8fafc] via-[#f0f7fc] to-[#effcfb] dark:from-[#0f172a] dark:via-[#1e293b] dark:to-[#0f172a] p-4 relative overflow-hidden">
       {/* Background decorations */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-gradient-to-br from-[#2d96c6]/10 to-[#28b5ad]/10 rounded-full blur-3xl" />
@@ -517,10 +517,10 @@ export default function ModelSetup({ onReady }: Props) {
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-[#2d96c6] to-[#28b5ad] shadow-xl shadow-[#2d96c6]/30 mb-4">
             <ToothIcon className="text-white" size={32} />
           </div>
-          <h1 className="text-3xl font-bold text-[#1e293b]">
+          <h1 className="text-3xl font-bold text-[#1e293b] dark:text-white">
             {t("appName")}
           </h1>
-          <p className="mt-2 text-[#64748b]">
+          <p className="mt-2 text-[#64748b] dark:text-[#94a3b8]">
             {t("setupSubtitle")}
           </p>
         </div>
