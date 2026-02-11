@@ -3,6 +3,7 @@ Integration test for platform-specific code refactoring.
 Tests that the platform module works correctly across all operating systems.
 """
 
+import os
 import sys
 from pathlib import Path
 
@@ -91,9 +92,17 @@ def test_user_data_dir_paths():
     assert "Library" in str(mac_dir) and "Application Support" in str(mac_dir)
     print(f"  ✓ macOS path: {mac_dir}")
 
-    # Linux should use .local/share or XDG_DATA_HOME
+    # Linux should use XDG_DATA_HOME if set, otherwise ~/.local/share
     linux_dir = linux.get_user_data_dir("TestApp")
-    assert ".local" in str(linux_dir) or "share" in str(linux_dir) or "XDG" in str(linux_dir)
+    xdg = os.environ.get("XDG_DATA_HOME")
+    if xdg:
+        assert str(linux_dir).startswith(xdg), (
+            f"Expected path to start with XDG_DATA_HOME={xdg}, got {linux_dir}"
+        )
+    else:
+        assert ".local" in str(linux_dir) and "share" in str(linux_dir), (
+            f"Expected .local/share in path, got {linux_dir}"
+        )
     print(f"  ✓ Linux path: {linux_dir}")
 
 

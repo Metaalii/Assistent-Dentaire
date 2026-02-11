@@ -97,7 +97,8 @@ class MacOSPlatform(PlatformBase):
     def check_gpu_backend_support(self) -> bool:
         """
         Check if llama-cpp-python has GPU support on macOS.
-        Checks for Metal backend support (Apple Silicon).
+        Actually verifies Metal backend by probing the llama-cpp-python build,
+        rather than assuming Apple Silicon implies Metal support.
 
         Returns:
             True if Metal backend is supported
@@ -106,10 +107,20 @@ class MacOSPlatform(PlatformBase):
         if os.getenv("LLAMA_METAL") == "1":
             return True
 
-        # Metal is usually available if we're on Apple Silicon
-        apple_info = self._detect_apple_silicon()
-        if apple_info is not None:
-            return True
+        # Actually verify llama-cpp-python was built with Metal/GPU support
+        try:
+            import llama_cpp
+            # llama_supports_gpu_offload() returns True only if the
+            # compiled binary has Metal (macOS) or CUDA (Linux/Win) enabled.
+            if hasattr(llama_cpp, "llama_supports_gpu_offload"):
+                return bool(llama_cpp.llama_supports_gpu_offload())
+            # Fallback for older versions: check the constant
+            if hasattr(llama_cpp, "LLAMA_SUPPORTS_GPU_OFFLOAD"):
+                return bool(llama_cpp.LLAMA_SUPPORTS_GPU_OFFLOAD)
+        except ImportError:
+            logger.debug("llama-cpp-python not installed, cannot verify Metal support")
+        except Exception as e:
+            logger.debug("Metal backend probe failed: %s", e)
 
         return False
 

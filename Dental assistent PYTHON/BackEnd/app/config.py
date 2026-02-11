@@ -1,3 +1,4 @@
+import os
 import sys
 import logging
 import threading
@@ -27,23 +28,34 @@ def app_base_dir() -> Path:
 def user_data_dir(app_name: str = "DentalAssistant") -> Path:
     """
     Cross-platform, dependency-free app data directory.
-    Uses platform-specific implementation:
+
+    Override with DENTAL_ASSISTANT_DATA_DIR env var (useful for CI/tests).
+    Otherwise uses platform-specific implementation:
     - Windows: %APPDATA%\\DentalAssistant
     - macOS:   ~/Library/Application Support/DentalAssistant
     - Linux:   ~/.local/share/DentalAssistant  (or $XDG_DATA_HOME)
     """
+    override = os.getenv("DENTAL_ASSISTANT_DATA_DIR")
+    if override:
+        return Path(override)
     platform = get_platform()
     return platform.get_user_data_dir(app_name)
 
 
 BASE_DIR = app_base_dir()
 
-# Where models live (must be writable)
+# Where models live — directory is created lazily, not at import time.
+# Use ensure_models_dir() when you need the directory to exist on disk.
 MODELS_DIR = user_data_dir() / "models"
-MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
 # Whisper model path (fixed location)
 WHISPER_MODEL_PATH = MODELS_DIR / "whisper-small"
+
+
+def ensure_models_dir() -> Path:
+    """Create MODELS_DIR on disk if it doesn't exist yet. Returns the path."""
+    MODELS_DIR.mkdir(parents=True, exist_ok=True)
+    return MODELS_DIR
 
 # ============================================
 # WHISPER MODEL DOWNLOAD CONFIGURATION
