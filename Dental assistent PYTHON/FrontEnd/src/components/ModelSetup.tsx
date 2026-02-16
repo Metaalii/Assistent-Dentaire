@@ -7,6 +7,7 @@ import {
   subscribeWhisperProgress,
   HardwareInfo,
 } from "../api";
+import { AppError, getErrorGuidance } from "../errors";
 import { useLanguage } from "../i18n";
 import {
   Button,
@@ -146,6 +147,8 @@ export default function ModelSetup({ onReady }: Props) {
   const [step, setStep] = useState<"checking" | "confirm" | "downloading" | "error">("checking");
   const [hardware, setHardware] = useState<HardwareInfo | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
+  const [errorCode, setErrorCode] = useState<string | undefined>();
+  const [errorHint, setErrorHint] = useState<string | undefined>();
   const [progress, setProgress] = useState(0);
   const [downloadedMB, setDownloadedMB] = useState(0);
   const [totalMB, setTotalMB] = useState(0);
@@ -157,8 +160,28 @@ export default function ModelSetup({ onReady }: Props) {
   // Fallback polling ref (only used if SSE fails)
   const fallbackTimer = useRef<number | null>(null);
 
+  const lang = (t("lang") as string) || "fr";
   const steps = [t("stepHardware") as string, t("stepDownload") as string, t("stepReady") as string];
   const currentStepIndex = step === "checking" ? 0 : step === "confirm" ? 0 : step === "downloading" ? 1 : 0;
+
+  /** Set structured error state from any caught value. */
+  const showError = (e: unknown, fallbackMsg?: string) => {
+    setStep("error");
+    if (e instanceof AppError) {
+      const guidance = getErrorGuidance(e.code, lang);
+      setErrorCode(e.code);
+      setErrorMsg(guidance.title);
+      setErrorHint(guidance.hint);
+    } else if (e instanceof Error) {
+      setErrorCode(undefined);
+      setErrorMsg(e.message);
+      setErrorHint(undefined);
+    } else {
+      setErrorCode(undefined);
+      setErrorMsg(fallbackMsg || String(e));
+      setErrorHint(undefined);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -174,10 +197,9 @@ export default function ModelSetup({ onReady }: Props) {
         } else {
           setStep("confirm");
         }
-      } catch {
+      } catch (e) {
         if (!cancelled) {
-          setStep("error");
-          setErrorMsg("Could not connect to the Local AI Engine. Is the backend running?");
+          showError(e, "Could not connect to the Local AI Engine. Is the backend running?");
         }
       }
     })();
@@ -199,8 +221,7 @@ export default function ModelSetup({ onReady }: Props) {
         setTimeout(onReady, 300);
       }
     } catch (e) {
-      setStep("error");
-      setErrorMsg(e instanceof Error ? e.message : "Could not connect to the backend.");
+      showError(e, "Could not connect to the backend.");
     }
   };
 
@@ -234,9 +255,8 @@ export default function ModelSetup({ onReady }: Props) {
         setTimeout(onReady, 500);
         return;
       }
-    } catch {
-      setStep("error");
-      setErrorMsg("Failed to start LLM download.");
+    } catch (e) {
+      showError(e, "Failed to start LLM download.");
       return;
     }
 
@@ -250,7 +270,17 @@ export default function ModelSetup({ onReady }: Props) {
         setProgress(100);
         setTimeout(onReady, 500);
       },
-      () => startFallbackPolling(),
+      (errMsg, errCode) => {
+        if (errCode) {
+          const guidance = getErrorGuidance(errCode, lang);
+          setErrorCode(errCode);
+          setErrorMsg(guidance.title);
+          setErrorHint(guidance.hint);
+          setStep("error");
+        } else {
+          startFallbackPolling();
+        }
+      },
     );
   };
 
@@ -295,7 +325,17 @@ export default function ModelSetup({ onReady }: Props) {
               setTimeout(onReady, 500);
             }
           },
-          () => startFallbackPolling(),
+          (errMsg, errCode) => {
+            if (errCode) {
+              const guidance = getErrorGuidance(errCode, lang);
+              setErrorCode(errCode);
+              setErrorMsg(guidance.title);
+              setErrorHint(guidance.hint);
+              setStep("error");
+            } else {
+              startFallbackPolling();
+            }
+          },
         );
       } else if (needsLLM) {
         // Only LLM needed
@@ -304,9 +344,8 @@ export default function ModelSetup({ onReady }: Props) {
         // Both already present
         setTimeout(onReady, 500);
       }
-    } catch {
-      setStep("error");
-      setErrorMsg("Failed to start download.");
+    } catch (e) {
+      showError(e, "Failed to start download.");
     }
   };
 
@@ -336,13 +375,20 @@ export default function ModelSetup({ onReady }: Props) {
           </div>
           <div>
             <h3 className="font-semibold text-white">{t("processingError")}</h3>
-            <p className="text-sm text-red-100">{t("errorOccurred")}</p>
+            {errorCode && (
+              <p className="text-sm text-red-200 font-mono">{errorCode}</p>
+            )}
           </div>
         </div>
       </div>
       <CardBody>
         <Alert variant="error" icon={<AlertCircleIcon size={18} />}>
-          {errorMsg || t("errorOccurred")}
+          <div>
+            <p className="font-semibold">{errorMsg || t("errorOccurred")}</p>
+            {errorHint && (
+              <p className="mt-1 text-sm opacity-90">{errorHint}</p>
+            )}
+          </div>
         </Alert>
         <div className="mt-6 flex flex-col sm:flex-row gap-3">
           <Button

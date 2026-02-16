@@ -1,10 +1,29 @@
+import json
 import logging
 import asyncio
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import PlainTextResponse
+from starlette.responses import JSONResponse
+
+from app.errors import (
+    INPUT_TOO_LARGE,
+    INPUT_MALFORMED_HEADER,
+    SYSTEM_RATE_LIMITED,
+)
 
 logger = logging.getLogger("dental_assistant.middleware")
+
+
+def _error_response(error_def, *, detail: str | None = None) -> JSONResponse:
+    """Build a structured JSON error response from an ErrorDef."""
+    return JSONResponse(
+        status_code=error_def.http_status,
+        content={
+            "error_code": error_def.code,
+            "message": error_def.message,
+            "detail": detail,
+        },
+    )
 
 
 class MaxRequestSizeMiddleware(BaseHTTPMiddleware):
@@ -26,14 +45,22 @@ class MaxRequestSizeMiddleware(BaseHTTPMiddleware):
             try:
                 if int(content_length) > self.max_bytes:
                     logger.warning(
-                        "Request blocked: content-length %s > max %s",
+                        "[%s] Request blocked: content-length %s > max %s",
+                        INPUT_TOO_LARGE.code,
                         content_length,
                         self.max_bytes,
                     )
-                    return PlainTextResponse("Request entity too large", status_code=413)
+                    return _error_response(
+                        INPUT_TOO_LARGE,
+                        detail=f"Max allowed: {self.max_bytes} bytes",
+                    )
             except ValueError:
-                logger.warning("Malformed content-length header: %s", content_length)
-                return PlainTextResponse("Bad Request", status_code=400)
+                logger.warning(
+                    "[%s] Malformed content-length header: %s",
+                    INPUT_MALFORMED_HEADER.code,
+                    content_length,
+                )
+                return _error_response(INPUT_MALFORMED_HEADER)
 
         return await call_next(request)
 
@@ -91,8 +118,13 @@ class SimpleRateLimitMiddleware(BaseHTTPMiddleware):
 
             # Check if rate limit exceeded
             if count > self.max_requests:
-                logger.warning("Rate limit exceeded for %s", client_host)
-                return PlainTextResponse("Too Many Requests", status_code=429)
+                logger.warning(
+                    "[%s] Rate limit exceeded for %s", SYSTEM_RATE_LIMITED.code, client_host,
+                )
+                return _error_response(
+                    SYSTEM_RATE_LIMITED,
+                    detail=f"Limit: {self.max_requests} requests per {self.window_seconds}s",
+                )
 
             # Periodic cleanup of expired entries (not all at once)
             if now - self._last_cleanup > self._cleanup_interval:

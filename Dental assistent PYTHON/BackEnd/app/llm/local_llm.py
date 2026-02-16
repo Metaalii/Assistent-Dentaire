@@ -4,9 +4,14 @@ import threading
 from pathlib import Path
 from typing import Optional, AsyncIterator
 
-from fastapi import HTTPException
-
 from app.config import get_llm_model_path, get_hardware_info
+from app.errors import (
+    AppError,
+    MODEL_LLM_NOT_FOUND,
+    MODEL_LLM_DEP_MISSING,
+    INFERENCE_BUSY,
+    INFERENCE_LLM_BAD_OUTPUT,
+)
 from app.llm_config import (
     CONTEXT_LENGTH,
     CPU_THREADS,
@@ -79,9 +84,9 @@ class LocalLLM:
     def _ensure_model_file(self) -> Path:
         model_path = get_llm_model_path()
         if not model_path.exists():
-            raise HTTPException(
-                status_code=503,
-                detail=f"LLM model not found at {model_path}. Run setup/download first.",
+            raise AppError(
+                MODEL_LLM_NOT_FOUND,
+                detail=f"Expected at {model_path}",
             )
         return model_path
 
@@ -128,10 +133,7 @@ class LocalLLM:
             try:
                 from llama_cpp import Llama  # type: ignore
             except Exception as e:
-                raise HTTPException(
-                    status_code=503,
-                    detail="LLM dependency not installed (llama-cpp-python). Install it to enable summarization.",
-                ) from e
+                raise AppError(MODEL_LLM_DEP_MISSING) from e
 
             # Detect hardware and get optimized configuration
             hw_info = get_hardware_info()
@@ -214,9 +216,9 @@ class LocalLLM:
                     timeout=timeout
                 )
             except asyncio.TimeoutError:
-                raise HTTPException(
-                    status_code=503,
-                    detail="Server is busy processing other requests. Please try again later."
+                raise AppError(
+                    INFERENCE_BUSY,
+                    detail=f"Queue timeout after {timeout}s",
                 )
 
             try:
@@ -255,9 +257,9 @@ class LocalLLM:
                     timeout=timeout
                 )
             except asyncio.TimeoutError:
-                raise HTTPException(
-                    status_code=503,
-                    detail="Server is busy processing other requests. Please try again later."
+                raise AppError(
+                    INFERENCE_BUSY,
+                    detail=f"Stream queue timeout after {timeout}s",
                 )
 
             try:
@@ -372,8 +374,5 @@ class LocalLLM:
         try:
             return result["choices"][0]["text"].strip()
         except Exception:
-            logger.exception("Unexpected LLM output format")
-            raise HTTPException(
-                status_code=500,
-                detail="LLM returned an unexpected response format.",
-            )
+            logger.exception("[%s] Unexpected LLM output format", INFERENCE_LLM_BAD_OUTPUT.code)
+            raise AppError(INFERENCE_LLM_BAD_OUTPUT)

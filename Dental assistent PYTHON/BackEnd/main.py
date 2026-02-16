@@ -22,6 +22,17 @@ from app.config import (
     MODEL_CONFIGS, ALTERNATIVE_MODELS, get_llm_model_path, analyze_hardware,
     get_hardware_info, WHISPER_MODEL_PATH, WHISPER_MODEL_FILES, WHISPER_EXPECTED_SIZE_MB,
 )
+from app.errors import (
+    AppError,
+    app_error_handler,
+    generic_http_handler,
+    unhandled_error_handler,
+    INPUT_EMPTY_TEXT,
+    MODEL_LLM_NOT_FOUND,
+    DOWNLOAD_ALREADY_ACTIVE,
+    DOWNLOAD_FAILED,
+    INFERENCE_STREAM_ERROR,
+)
 from app.middleware import MaxRequestSizeMiddleware, SimpleRateLimitMiddleware
 from app.security import verify_api_key, check_api_key_configured, validate_security_config
 from app.llm_config import SMARTNOTE_PROMPT_OPTIMIZED
@@ -89,6 +100,11 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Dental Assistant Backend", lifespan=lifespan)
+
+# --- Global exception handlers (structured JSON for every error) ---
+app.add_exception_handler(AppError, app_error_handler)
+app.add_exception_handler(HTTPException, generic_http_handler)
+app.add_exception_handler(Exception, unhandled_error_handler)
 
 # Router import from app/llm/api/transcribe.py
 from app.llm.api.transcribe import router as transcribe_router  # noqa: E402
@@ -166,12 +182,12 @@ async def summarize(req: SummaryRequest):
     Returns the complete summary when generation is finished.
     """
     if not get_llm_model_path().exists():
-        raise HTTPException(status_code=503, detail="Model not downloaded. Please run setup.")
+        raise AppError(MODEL_LLM_NOT_FOUND)
 
     # Sanitize input before LLM processing
     sanitized_text = sanitize_input(req.text)
     if not sanitized_text:
-        raise HTTPException(status_code=400, detail="Text input is empty or invalid.")
+        raise AppError(INPUT_EMPTY_TEXT)
 
     # Lazy import: backend boots even without llama-cpp-python installed.
     from app.llm.local_llm import LocalLLM  # noqa: WPS433
@@ -191,14 +207,15 @@ async def summarize_stream(req: SummaryRequest):
     Event format:
     - data: {"chunk": "token text"}  - for each generated token
     - data: [DONE]                    - when generation is complete
+    - data: {"error_code": "...", "message": "..."}  - on error
     """
     if not get_llm_model_path().exists():
-        raise HTTPException(status_code=503, detail="Model not downloaded. Please run setup.")
+        raise AppError(MODEL_LLM_NOT_FOUND)
 
     # Sanitize input before LLM processing
     sanitized_text = sanitize_input(req.text)
     if not sanitized_text:
-        raise HTTPException(status_code=400, detail="Text input is empty or invalid.")
+        raise AppError(INPUT_EMPTY_TEXT)
 
     from app.llm.local_llm import LocalLLM  # noqa: WPS433
 
@@ -211,8 +228,8 @@ async def summarize_stream(req: SummaryRequest):
                 yield f"data: {json.dumps({'chunk': chunk})}\n\n"
             yield "data: [DONE]\n\n"
         except Exception as e:
-            logger.exception("Streaming error")
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            logger.exception("[%s] Streaming generation error", INFERENCE_STREAM_ERROR.code)
+            yield f"data: {json.dumps({'error_code': INFERENCE_STREAM_ERROR.code, 'message': INFERENCE_STREAM_ERROR.message, 'detail': str(e)})}\n\n"
 
     return StreamingResponse(
         event_generator(),
@@ -290,15 +307,15 @@ def _atomic_download(url: str, dest_path: Path) -> None:
         logger.info("Model download complete: %s", dest_path)
 
     except Exception as exc:
-        logger.exception("Model download failed")
-        _download_state["error"] = str(exc)
+        logger.exception("[%s] Model download failed: %s", DOWNLOAD_FAILED.code, dest_path)
+        _download_state["error"] = f"[{DOWNLOAD_FAILED.code}] {exc}"
         _download_state["active"] = False
         try:
             tmp_path = dest_path.with_suffix(dest_path.suffix + ".part")
             if tmp_path.exists():
                 tmp_path.unlink()
         except Exception:
-            logger.warning("Failed to remove partial file: %s", tmp_path)
+            logger.warning("[%s] Failed to remove partial file: %s", DOWNLOAD_FAILED.code, tmp_path)
         raise
     finally:
         _download_lock.release()
@@ -442,7 +459,7 @@ async def download_progress():
             state = _download_state.copy()
 
             if state.get("error"):
-                yield f"data: {json.dumps({'error': state['error']})}\n\n"
+                yield f"data: {json.dumps({'error_code': DOWNLOAD_FAILED.code, 'message': DOWNLOAD_FAILED.message, 'error': state['error']})}\n\n"
                 return
 
             payload = {
@@ -566,8 +583,8 @@ def _download_whisper_files() -> None:
         logger.info("Whisper model download complete: %s", dest_dir)
 
     except Exception as exc:
-        logger.exception("Whisper model download failed")
-        _whisper_download_state["error"] = str(exc)
+        logger.exception("[%s] Whisper model download failed", DOWNLOAD_FAILED.code)
+        _whisper_download_state["error"] = f"[{DOWNLOAD_FAILED.code}] {exc}"
         _whisper_download_state["active"] = False
         raise
     finally:
@@ -595,7 +612,7 @@ async def whisper_download_progress():
             state = _whisper_download_state.copy()
 
             if state.get("error"):
-                yield f"data: {json.dumps({'error': state['error']})}\n\n"
+                yield f"data: {json.dumps({'error_code': DOWNLOAD_FAILED.code, 'message': DOWNLOAD_FAILED.message, 'error': state['error']})}\n\n"
                 return
 
             payload = {
