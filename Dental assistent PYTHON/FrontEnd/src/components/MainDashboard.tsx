@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { summarizeTextStream, transcribeAudio } from "../api";
+import { summarizeTextStreamRAG, transcribeAudio, saveConsultation } from "../api";
 import { useProfile } from "../hooks/useProfile";
 import { useLanguage, useTheme } from "../i18n";
 import {
@@ -38,9 +38,10 @@ function getExt(name: string) {
 // ============================================
 // HEADER COMPONENT (memoized)
 // ============================================
-const Header: React.FC<{ onClear: () => void; hasContent: boolean }> = React.memo(({
+const Header: React.FC<{ onClear: () => void; hasContent: boolean; onViewHistory?: () => void }> = React.memo(({
   onClear,
   hasContent,
+  onViewHistory,
 }) => {
   const { t } = useLanguage();
   const { resolvedTheme, toggleTheme } = useTheme();
@@ -71,6 +72,17 @@ const Header: React.FC<{ onClear: () => void; hasContent: boolean }> = React.mem
               <span className="w-2 h-2 rounded-full bg-[#10b981] animate-pulse" />
               {t("online")}
             </Badge>
+            {/* History button */}
+            {onViewHistory && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={onViewHistory}
+                leftIcon={<DocumentIcon size={16} />}
+              >
+                {t("viewHistory")}
+              </Button>
+            )}
             {/* Theme toggle button */}
             <button
               onClick={toggleTheme}
@@ -676,7 +688,11 @@ ResultCard.displayName = 'ResultCard';
 // ============================================
 // MAIN DASHBOARD COMPONENT
 // ============================================
-export default function MainDashboard() {
+interface MainDashboardProps {
+  onViewHistory?: () => void;
+}
+
+export default function MainDashboard({ onViewHistory }: MainDashboardProps) {
   const { t, language } = useLanguage();
   const [fileName, setFileName] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -686,6 +702,8 @@ export default function MainDashboard() {
   const [document, setDocument] = useState<string | null>(null);
   const [streamingContent, setStreamingContent] = useState<string>("");
   const [isDragActive, setIsDragActive] = useState(false);
+  const [isRagEnhanced, setIsRagEnhanced] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
 
   const { profile, getDocumentHeader, getDocumentFooter } = useProfile();
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -704,18 +722,22 @@ export default function MainDashboard() {
     setTranscript(null);
     setDocument(null);
     setStreamingContent("");
+    setIsRagEnhanced(false);
+    setIsSaved(false);
 
     try {
       // Step 1: Transcribe audio (pass UI language as transcription hint)
       const tr = await transcribeAudio(file, language);
       setTranscript(tr.text);
 
-      // Step 2: Generate summary with streaming for real-time feedback
+      // Step 2: Generate RAG-enhanced summary with streaming
       setIsLoading(false);
       setIsStreaming(true);
 
-      await summarizeTextStream(
-        tr.text,
+      const transcriptionText = tr.text;
+
+      await summarizeTextStreamRAG(
+        transcriptionText,
         // onChunk: called for each token
         (chunk) => {
           setStreamingContent((prev) => prev + chunk);
@@ -731,6 +753,21 @@ ${getDocumentFooter(language)}`;
           setDocument(fullDocument);
           setIsStreaming(false);
           setStreamingContent("");
+
+          // Auto-save consultation to history (fire-and-forget)
+          saveConsultation({
+            smartnote: fullText,
+            transcription: transcriptionText,
+            dentist_name: profile?.name || "",
+          }).then(() => {
+            setIsSaved(true);
+          }).catch((err) => {
+            console.warn("Failed to save consultation to history:", err);
+          });
+        },
+        // onRAGStatus: tells us if RAG knowledge was used
+        (ragEnhanced) => {
+          setIsRagEnhanced(ragEnhanced);
         },
         // onError: called on error
         (err) => {
@@ -746,7 +783,7 @@ ${getDocumentFooter(language)}`;
       setIsLoading(false);
       setIsStreaming(false);
     }
-  }, [getDocumentHeader, getDocumentFooter]);
+  }, [getDocumentHeader, getDocumentFooter, profile, language]);
 
   const handleExportPDF = useCallback(() => {
     if (!document) return;
@@ -1034,7 +1071,7 @@ ${getDocumentFooter(language)}`;
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#f8fafc] via-[#f0f7fc] to-[#f8fafc] dark:from-[#0f172a] dark:via-[#1e293b] dark:to-[#0f172a]">
       {/* Header */}
-      <Header onClear={clearAll} hasContent={hasContent} />
+      <Header onClear={clearAll} hasContent={hasContent} onViewHistory={onViewHistory} />
 
       {/* Main content */}
       <main className="py-8">
@@ -1119,9 +1156,22 @@ ${getDocumentFooter(language)}`;
               <section className="animate-fade-in-up">
                 <Card className="overflow-hidden">
                   <CardHeader icon={<DocumentIcon className="text-white" size={20} />}>
-                    <div>
-                      <h2 className="font-semibold text-[#1e293b] dark:text-white">{t("generatedDocument")}</h2>
-                      <p className="text-xs text-[#64748b] dark:text-[#94a3b8]">{t("editableBeforeExport")}</p>
+                    <div className="flex items-center gap-3">
+                      <div>
+                        <h2 className="font-semibold text-[#1e293b] dark:text-white">{t("generatedDocument")}</h2>
+                        <p className="text-xs text-[#64748b] dark:text-[#94a3b8]">{t("editableBeforeExport")}</p>
+                      </div>
+                      {isRagEnhanced && (
+                        <Badge variant="success">
+                          <SparklesIcon size={12} />
+                          {t("ragEnhanced")}
+                        </Badge>
+                      )}
+                      {isSaved && (
+                        <Badge variant="neutral">
+                          {t("consultationSaved")}
+                        </Badge>
+                      )}
                     </div>
                   </CardHeader>
                   <CardBody>

@@ -21,10 +21,11 @@ from pydantic import BaseModel
 from app.config import (
     MODEL_CONFIGS, ALTERNATIVE_MODELS, get_llm_model_path, analyze_hardware,
     get_hardware_info, WHISPER_MODEL_PATH, WHISPER_MODEL_FILES, WHISPER_EXPECTED_SIZE_MB,
+    RAG_DATA_DIR,
 )
 from app.middleware import MaxRequestSizeMiddleware, SimpleRateLimitMiddleware
 from app.security import verify_api_key, check_api_key_configured, validate_security_config
-from app.llm_config import SMARTNOTE_PROMPT_OPTIMIZED
+from app.llm_config import SMARTNOTE_PROMPT_OPTIMIZED, build_rag_smartnote_prompt
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("dental_assistant")
@@ -81,6 +82,9 @@ async def lifespan(app: FastAPI):
         hw_info.get("vram_gb", "N/A"),
         "supported" if hw_info.get("backend_gpu_support") else "not supported"
     )
+
+    # Initialize RAG system (non-blocking: features degrade gracefully if unavailable)
+    _initialize_rag()
 
     yield  # Application runs here
 
@@ -633,3 +637,213 @@ async def health():
     models_ready = _is_model_valid(model_path, expected_size)
     whisper_ready = _is_whisper_valid()
     return {"status": "ok", "models_ready": models_ready, "whisper_ready": whisper_ready}
+
+
+# ---------------------------------------------------------------------------
+# RAG System: Haystack + ChromaDB
+# ---------------------------------------------------------------------------
+
+_rag_available = False
+
+
+def _initialize_rag() -> None:
+    """
+    Initialize RAG system at startup.
+
+    Non-fatal: if Haystack/ChromaDB are not installed, the app still works
+    without RAG features.
+    """
+    global _rag_available
+    try:
+        from app.rag.store import DentalDocumentStore
+        from app.rag.pipelines import DentalRAGPipeline
+        from app.rag.dental_knowledge import get_seed_knowledge
+
+        store = DentalDocumentStore()
+        store.initialize(RAG_DATA_DIR)
+
+        pipeline = DentalRAGPipeline()
+        pipeline.initialize(store)
+
+        # Seed knowledge base on first run
+        stats = store.get_stats()
+        if stats["knowledge_count"] == 0:
+            logger.info("Seeding dental knowledge base...")
+            seed_docs = get_seed_knowledge()
+            result = pipeline.index_knowledge(seed_docs)
+            logger.info("Seeded %s knowledge documents", result.get("documents_written", 0))
+
+        _rag_available = True
+        logger.info(
+            "RAG system ready: %d knowledge docs, %d consultations",
+            stats.get("knowledge_count", 0) or len(get_seed_knowledge()),
+            stats.get("consultations_count", 0),
+        )
+    except ImportError:
+        logger.info(
+            "RAG dependencies not installed (haystack-ai, chroma-haystack). "
+            "RAG features disabled. Install with: pip install haystack-ai chroma-haystack sentence-transformers"
+        )
+    except Exception:
+        logger.exception("Failed to initialize RAG system. RAG features disabled.")
+
+
+# --- RAG endpoint models ---
+
+class SaveConsultationRequest(BaseModel):
+    smartnote: str
+    transcription: str = ""
+    dentist_name: str = ""
+    consultation_type: str = ""
+    patient_id: str = ""
+
+
+class SearchRequest(BaseModel):
+    query: str
+    top_k: int = 10
+
+
+# --- RAG endpoints ---
+
+@app.get("/rag/status")
+async def rag_status():
+    """Check RAG system status and document counts."""
+    if not _rag_available:
+        return {
+            "available": False,
+            "detail": "RAG dependencies not installed",
+            "consultations_count": 0,
+            "knowledge_count": 0,
+        }
+    try:
+        from app.rag.store import DentalDocumentStore
+        store = DentalDocumentStore()
+        stats = store.get_stats()
+        return {
+            "available": True,
+            **stats,
+        }
+    except Exception as e:
+        return {"available": False, "detail": str(e)}
+
+
+@app.post("/consultations/save", dependencies=[Depends(verify_api_key)])
+async def save_consultation(req: SaveConsultationRequest):
+    """Save a completed SmartNote to the consultation archive."""
+    if not _rag_available:
+        return {"status": "rag_unavailable", "detail": "RAG system not available"}
+
+    from app.rag.pipelines import DentalRAGPipeline
+    pipeline = DentalRAGPipeline()
+    result = pipeline.save_consultation(
+        smartnote=req.smartnote,
+        transcription=req.transcription,
+        dentist_name=req.dentist_name,
+        consultation_type=req.consultation_type,
+        patient_id=req.patient_id,
+    )
+    return result
+
+
+@app.post("/consultations/search", dependencies=[Depends(verify_api_key)])
+async def search_consultations(req: SearchRequest):
+    """Semantic search across past consultations."""
+    if not _rag_available:
+        return {"results": [], "detail": "RAG system not available"}
+
+    from app.rag.pipelines import DentalRAGPipeline
+    pipeline = DentalRAGPipeline()
+
+    sanitized_query = sanitize_input(req.query, max_length=500)
+    if not sanitized_query:
+        raise HTTPException(status_code=400, detail="Search query is empty or invalid.")
+
+    results = pipeline.search_consultations(
+        query=sanitized_query,
+        top_k=min(req.top_k, 50),
+    )
+    return {"results": results, "count": len(results)}
+
+
+@app.post("/summarize-rag", dependencies=[Depends(verify_api_key)])
+async def summarize_with_rag(req: SummaryRequest):
+    """
+    Generate a RAG-enhanced SmartNote.
+
+    Retrieves relevant dental knowledge before generation to ground
+    the SmartNote in verified medical references and protocols.
+    Falls back to standard summarization if RAG is unavailable.
+    """
+    if not get_llm_model_path().exists():
+        raise HTTPException(status_code=503, detail="Model not downloaded. Please run setup.")
+
+    sanitized_text = sanitize_input(req.text)
+    if not sanitized_text:
+        raise HTTPException(status_code=400, detail="Text input is empty or invalid.")
+
+    # Retrieve RAG context if available
+    rag_context = ""
+    if _rag_available:
+        from app.rag.pipelines import DentalRAGPipeline
+        pipeline = DentalRAGPipeline()
+        rag_context = pipeline.get_rag_context(sanitized_text)
+
+    from app.llm.local_llm import LocalLLM
+    llm = LocalLLM()
+    prompt = build_rag_smartnote_prompt(sanitized_text, rag_context)
+    summary = await llm.generate(prompt)
+    return {
+        "summary": summary,
+        "rag_enhanced": bool(rag_context),
+        "sources_used": len(rag_context.split("\n\n")) if rag_context else 0,
+    }
+
+
+@app.post("/summarize-stream-rag", dependencies=[Depends(verify_api_key)])
+async def summarize_stream_with_rag(req: SummaryRequest):
+    """
+    Stream RAG-enhanced SmartNote generation using SSE.
+
+    Same as /summarize-stream but with dental knowledge retrieval
+    for higher quality, reference-grounded SmartNotes.
+    """
+    if not get_llm_model_path().exists():
+        raise HTTPException(status_code=503, detail="Model not downloaded. Please run setup.")
+
+    sanitized_text = sanitize_input(req.text)
+    if not sanitized_text:
+        raise HTTPException(status_code=400, detail="Text input is empty or invalid.")
+
+    # Retrieve RAG context if available
+    rag_context = ""
+    if _rag_available:
+        from app.rag.pipelines import DentalRAGPipeline
+        pipeline = DentalRAGPipeline()
+        rag_context = pipeline.get_rag_context(sanitized_text)
+
+    from app.llm.local_llm import LocalLLM
+    llm = LocalLLM()
+    prompt = build_rag_smartnote_prompt(sanitized_text, rag_context)
+
+    rag_enhanced = bool(rag_context)
+
+    async def event_generator():
+        try:
+            # Send RAG metadata as first event
+            yield f"data: {json.dumps({'rag_enhanced': rag_enhanced})}\n\n"
+            async for chunk in llm.generate_stream(prompt):
+                yield f"data: {json.dumps({'chunk': chunk})}\n\n"
+            yield "data: [DONE]\n\n"
+        except Exception as e:
+            logger.exception("RAG streaming error")
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )

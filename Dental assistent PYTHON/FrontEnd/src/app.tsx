@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import ModelSetup from "./components/ModelSetup";
 import MainDashboard from "./components/MainDashboard";
+import ConsultationHistory from "./components/ConsultationHistory";
 import LanguageSelector from "./components/LanguageSelector";
 import ProfileSetup from "./components/ProfileSetup";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -15,6 +16,7 @@ type BootState =
   | { state: "starting" }
   | { state: "setup" }
   | { state: "ready" }
+  | { state: "history" }
   | { state: "error"; message: string };
 
 async function sleep(ms: number) {
@@ -246,10 +248,18 @@ function AppContent() {
     );
   }
 
+  if (boot.state === "history") {
+    return (
+      <ErrorBoundary>
+        <ConsultationHistory onBack={() => setBoot({ state: "ready" })} />
+      </ErrorBoundary>
+    );
+  }
+
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-gradient-to-br from-[#f8fafc] via-[#f0f7fc] to-[#f8fafc] dark:from-[#0f172a] dark:via-[#1e293b] dark:to-[#0f172a]">
-        <MainDashboard />
+        <MainDashboard onViewHistory={() => setBoot({ state: "history" })} />
       </div>
     </ErrorBoundary>
   );

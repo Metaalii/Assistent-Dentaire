@@ -336,6 +336,173 @@ export function subscribeWhisperProgress(
   return () => controller.abort();
 }
 
+// ---------------------------------------------------------------------------
+// RAG & Consultation History API
+// ---------------------------------------------------------------------------
+
+export interface RAGStatus {
+  available: boolean;
+  initialized?: boolean;
+  consultations_count: number;
+  knowledge_count: number;
+  detail?: string;
+}
+
+export interface ConsultationResult {
+  smartnote: string;
+  transcription: string;
+  date: string;
+  date_display: string;
+  dentist_name: string;
+  consultation_type: string;
+  patient_id: string;
+  score: number;
+}
+
+export interface SearchResponse {
+  results: ConsultationResult[];
+  count: number;
+  detail?: string;
+}
+
+export interface SaveConsultationRequest {
+  smartnote: string;
+  transcription?: string;
+  dentist_name?: string;
+  consultation_type?: string;
+  patient_id?: string;
+}
+
+export async function getRAGStatus(): Promise<RAGStatus> {
+  const res = await fetch(`${BASE_URL}/rag/status`, {
+    headers: await authHeaders(),
+  });
+  if (!res.ok) throw new Error(await safeError(res));
+  return res.json();
+}
+
+export async function saveConsultation(data: SaveConsultationRequest): Promise<{ status: string }> {
+  const res = await fetch(`${BASE_URL}/consultations/save`, {
+    method: "POST",
+    headers: await authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error(await safeError(res));
+  return res.json();
+}
+
+export async function searchConsultations(query: string, topK: number = 10): Promise<SearchResponse> {
+  const res = await fetch(`${BASE_URL}/consultations/search`, {
+    method: "POST",
+    headers: await authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ query, top_k: topK }),
+  });
+  if (!res.ok) throw new Error(await safeError(res));
+  return res.json();
+}
+
+/**
+ * Stream RAG-enhanced SmartNote generation using SSE.
+ * Falls back to standard summarization if RAG is unavailable.
+ */
+export async function summarizeTextStreamRAG(
+  text: string,
+  onChunk: (chunk: string) => void,
+  onComplete: (fullText: string) => void,
+  onRAGStatus?: (ragEnhanced: boolean) => void,
+  onError?: (error: Error) => void
+): Promise<void> {
+  const headers = await authHeaders({ "Content-Type": "application/json" });
+
+  try {
+    const res = await fetch(`${BASE_URL}/summarize-stream-rag`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ text }),
+    });
+
+    if (!res.ok) {
+      throw new Error(await safeError(res));
+    }
+
+    const reader = res.body?.getReader();
+    if (!reader) {
+      throw new Error("No response body");
+    }
+
+    const decoder = new TextDecoder();
+    let fullText = "";
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        if (line.startsWith("data: ")) {
+          const data = line.slice(6).trim();
+
+          if (data === "[DONE]") {
+            onComplete(fullText);
+            return;
+          }
+
+          if (!data) continue;
+
+          try {
+            const parsed = JSON.parse(data);
+            if (parsed.rag_enhanced !== undefined && onRAGStatus) {
+              onRAGStatus(parsed.rag_enhanced);
+            } else if (parsed.chunk) {
+              fullText += parsed.chunk;
+              onChunk(parsed.chunk);
+            } else if (parsed.error) {
+              throw new Error(parsed.error);
+            }
+          } catch (parseErr) {
+            if (data.length > 0 && !data.startsWith("{")) {
+              console.warn("Failed to parse SSE data:", data);
+            }
+          }
+        }
+      }
+    }
+
+    // Process remaining buffer
+    if (buffer.trim()) {
+      const remainingLine = buffer.trim();
+      if (remainingLine.startsWith("data: ")) {
+        const data = remainingLine.slice(6).trim();
+        if (data && data !== "[DONE]") {
+          try {
+            const parsed = JSON.parse(data);
+            if (parsed.chunk) {
+              fullText += parsed.chunk;
+              onChunk(parsed.chunk);
+            }
+          } catch {
+            // Ignore
+          }
+        }
+      }
+    }
+
+    onComplete(fullText);
+  } catch (err) {
+    const error = err instanceof Error ? err : new Error(String(err));
+    if (onError) {
+      onError(error);
+    } else {
+      throw error;
+    }
+  }
+}
+
 async function safeError(res: Response): Promise<string> {
   try {
     const data = await res.json();
