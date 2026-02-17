@@ -79,7 +79,8 @@ app.add_middleware(
     ],
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["X-API-Key", "Content-Type"],
+    allow_headers=["X-API-Key", "Content-Type", "X-Request-ID"],
+    expose_headers=["X-Request-ID"],
 )
 app.add_middleware(MaxRequestSizeMiddleware, max_bytes=100 * 1024 * 1024)
 app.add_middleware(RateLimitMiddleware)
@@ -96,9 +97,11 @@ from app.api.summarize import router as summarize_router  # noqa: E402
 from app.api.setup import router as setup_router  # noqa: E402
 from app.api.rag import router as rag_router  # noqa: E402
 from app.llm.api.transcribe import router as transcribe_router  # noqa: E402
+from app.api.error_report import router as error_report_router  # noqa: E402
 
 app.include_router(health_router)
 app.include_router(summarize_router)
 app.include_router(setup_router)
 app.include_router(rag_router)
 app.include_router(transcribe_router)
+app.include_router(error_report_router)

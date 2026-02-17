@@ -7,6 +7,8 @@ Provides:
 - MetricsCollector          — singleton that tracks request counts, latency percentiles,
                               error counts by endpoint, and a ring buffer of recent errors.
 - get_metrics()             — snapshot for the GET /metrics endpoint.
+- Error-report helpers      — pending errors queue so the frontend can prompt the user
+                              to optionally send bug reports to the developer.
 
 No external services required — everything lives in-process.
 """
@@ -69,6 +71,8 @@ class MetricsCollector:
                     inst._lock = Lock()
                     inst._endpoints: dict[str, _EndpointStats] = defaultdict(_EndpointStats)
                     inst._recent_errors: deque[dict[str, Any]] = deque(maxlen=_ERROR_BUFFER_SIZE)
+                    # Errors the frontend hasn't acted on yet, keyed by error_id
+                    inst._pending_errors: dict[str, dict[str, Any]] = {}
                     inst._start_time = time.monotonic()
                     inst._total_requests = 0
                     inst._active_requests = 0
@@ -110,16 +114,32 @@ class MetricsCollector:
 
             if status_code >= 500:
                 stats.error_count += 1
-                self._recent_errors.append({
+                error_id = uuid.uuid4().hex[:10]
+                error_record = {
+                    "error_id": error_id,
                     "timestamp": time.time(),
                     "request_id": request_id,
                     "method": method,
                     "path": path,
                     "status": status_code,
                     "detail": detail[:500],
-                })
+                }
+                self._recent_errors.append(error_record)
+                self._pending_errors[error_id] = error_record
             elif 400 <= status_code < 500:
                 stats.client_error_count += 1
+
+    # ----- error-report helpers -----
+
+    def get_pending_errors(self) -> list[dict[str, Any]]:
+        """Return errors the user hasn't reported or dismissed yet."""
+        with self._lock:
+            return list(self._pending_errors.values())
+
+    def pop_error(self, error_id: str) -> dict[str, Any] | None:
+        """Remove and return a pending error (for reporting or dismissing)."""
+        with self._lock:
+            return self._pending_errors.pop(error_id, None)
 
     # ----- querying -----
 
