@@ -97,7 +97,7 @@ class LocalWhisper:
 
     async def transcribe(self, audio_path: str, language: Optional[str] = None) -> str:
         """
-        Runs transcription in a worker thread.
+        Runs transcription in the 'whisper' worker pool (bounded concurrency).
 
         Args:
             audio_path: Path to the audio file
@@ -105,7 +105,10 @@ class LocalWhisper:
         """
         self._load_model_if_needed()
         lang = language or WHISPER_DEFAULT_LANGUAGE
-        return await asyncio.to_thread(self._transcribe_sync, audio_path, lang)
+
+        from app.worker import WorkerPool
+
+        return await WorkerPool().run("whisper", self._transcribe_sync, audio_path, lang)
 
     def _transcribe_sync(self, audio_path: str, language: str = "fr") -> str:
         """

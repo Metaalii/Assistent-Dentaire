@@ -4,6 +4,7 @@ Health-check, status & observability endpoints.
 GET /health     — quick liveness probe used by the Tauri frontend boot sequence.
 GET /llm/status — LLM inference queue status (concurrency, running, waiting).
 GET /metrics    — operational metrics: request counts, latency percentiles, recent errors.
+GET /workers/status — worker pool status: concurrency, running, queued per pool.
 """
 
 import logging
@@ -94,3 +95,17 @@ async def metrics():
     from app.observability import get_metrics
 
     return get_metrics()
+
+
+@router.get("/workers/status")
+async def workers_status():
+    """
+    Combined worker pool status across all heavy-task pools.
+
+    Shows per-pool: concurrency limit, running tasks, queued tasks,
+    total processed, total errors, and whether the pool is saturated.
+    Pools: llm, whisper, rag.
+    """
+    from app.worker import WorkerPool
+
+    return WorkerPool().status()

@@ -54,8 +54,15 @@ async def lifespan(app: FastAPI):
 
     initialize_rag()
 
+    # Eagerly create the WorkerPool so it's ready before the first request
+    from app.worker import WorkerPool
+
+    worker_pool = WorkerPool()
+
     yield
 
+    # Teardown: drain worker threads
+    worker_pool.shutdown()
     logger.info("Dental Assistant Backend shutting down")
 
 

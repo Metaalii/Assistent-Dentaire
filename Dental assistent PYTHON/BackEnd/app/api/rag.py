@@ -129,14 +129,18 @@ async def save_consultation(req: SaveConsultationRequest):
         return {"status": "rag_unavailable", "detail": "RAG system not available"}
 
     from app.rag.pipelines import DentalRAGPipeline
+    from app.worker import WorkerPool
 
     pipeline = DentalRAGPipeline()
-    return pipeline.save_consultation(
-        smartnote=req.smartnote,
-        transcription=req.transcription,
-        dentist_name=req.dentist_name,
-        consultation_type=req.consultation_type,
-        patient_id=req.patient_id,
+    return await WorkerPool().run(
+        "rag",
+        lambda: pipeline.save_consultation(
+            smartnote=req.smartnote,
+            transcription=req.transcription,
+            dentist_name=req.dentist_name,
+            consultation_type=req.consultation_type,
+            patient_id=req.patient_id,
+        ),
     )
 
 
@@ -147,15 +151,18 @@ async def search_consultations(req: SearchRequest):
         return {"results": [], "detail": "RAG system not available"}
 
     from app.rag.pipelines import DentalRAGPipeline
+    from app.worker import WorkerPool
 
     sanitized_query = sanitize_input(req.query, max_length=500)
     if not sanitized_query:
         raise HTTPException(status_code=400, detail="Search query is empty or invalid.")
 
     pipeline = DentalRAGPipeline()
-    results = pipeline.search_consultations(
-        query=sanitized_query,
-        top_k=min(req.top_k, 50),
+    results = await WorkerPool().run(
+        "rag",
+        pipeline.search_consultations,
+        sanitized_query,
+        min(req.top_k, 50),
     )
     return {"results": results, "count": len(results)}
 
@@ -164,14 +171,15 @@ async def search_consultations(req: SearchRequest):
 # RAG-enhanced summarization helpers
 # ---------------------------------------------------------------------------
 
-def _get_rag_context(text: str) -> str:
+async def _get_rag_context(text: str) -> str:
     """Retrieve relevant dental knowledge for the given text. Returns '' if unavailable."""
     if not _rag_available:
         return ""
     from app.rag.pipelines import DentalRAGPipeline
+    from app.worker import WorkerPool
 
     pipeline = DentalRAGPipeline()
-    return pipeline.get_rag_context(text)
+    return await WorkerPool().run("rag", pipeline.get_rag_context, text)
 
 
 @router.post("/summarize-rag", dependencies=[Depends(verify_api_key)])
@@ -190,7 +198,7 @@ async def summarize_with_rag(req: SummaryRequest):
     if not sanitized_text:
         raise HTTPException(status_code=400, detail="Text input is empty or invalid.")
 
-    rag_context = _get_rag_context(sanitized_text)
+    rag_context = await _get_rag_context(sanitized_text)
 
     from app.llm.local_llm import LocalLLM
 
@@ -220,7 +228,7 @@ async def summarize_stream_with_rag(req: SummaryRequest, request: Request):
     if not sanitized_text:
         raise HTTPException(status_code=400, detail="Text input is empty or invalid.")
 
-    rag_context = _get_rag_context(sanitized_text)
+    rag_context = await _get_rag_context(sanitized_text)
 
     from app.llm.local_llm import LocalLLM
 
