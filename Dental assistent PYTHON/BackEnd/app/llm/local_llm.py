@@ -299,7 +299,8 @@ class LocalLLM:
             cancel=cancel_event,
         )
         try:
-            queue: asyncio.Queue[str | None] = asyncio.Queue()
+            # Sentinel / error channel: str = token, None = done, BaseException = error
+            queue: asyncio.Queue[str | BaseException | None] = asyncio.Queue()
             loop = asyncio.get_running_loop()
 
             def stream_worker():
@@ -319,17 +320,20 @@ class LocalLLM:
                         loop.call_soon_threadsafe(queue.put_nowait, chunk)
                 except Exception as e:
                     logger.exception("Streaming generation error")
-                finally:
-                    loop.call_soon_threadsafe(queue.put_nowait, None)
+                    loop.call_soon_threadsafe(queue.put_nowait, e)
+                    return
+                loop.call_soon_threadsafe(queue.put_nowait, None)
 
             thread = threading.Thread(target=stream_worker, daemon=True)
             thread.start()
 
             while True:
-                chunk = await queue.get()
-                if chunk is None:
+                item = await queue.get()
+                if item is None:
                     break
-                yield chunk
+                if isinstance(item, BaseException):
+                    raise item
+                yield item
         finally:
             await self._gate.release()
 
