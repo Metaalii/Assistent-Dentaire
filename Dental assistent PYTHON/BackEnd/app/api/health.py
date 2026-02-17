@@ -1,7 +1,8 @@
 """
-Health-check endpoint.
+Health-check & status endpoints.
 
-GET /health — quick liveness probe used by the Tauri frontend boot sequence.
+GET /health     — quick liveness probe used by the Tauri frontend boot sequence.
+GET /llm/status — LLM inference queue status (concurrency, running, waiting).
 """
 
 import logging
@@ -61,3 +62,20 @@ async def health():
     models_ready = _is_model_valid(model_path, expected_size)
     whisper_ready = _is_whisper_valid()
     return {"status": "ok", "models_ready": models_ready, "whisper_ready": whisper_ready}
+
+
+@router.get("/llm/status")
+async def llm_status():
+    """
+    Return the LLM inference queue status.
+
+    Response:
+    - max_concurrency: number of simultaneous inference slots
+    - running: slots currently in use
+    - waiting: requests queued behind running slots
+    - is_busy: true when all slots are occupied
+    """
+    from app.llm.local_llm import LocalLLM
+
+    llm = LocalLLM()
+    return llm.get_queue_status()

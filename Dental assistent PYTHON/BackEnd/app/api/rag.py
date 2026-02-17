@@ -10,8 +10,9 @@ POST /summarize-stream-rag    — RAG-enhanced SmartNote (SSE streaming)
 
 import json
 import logging
+import threading
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -204,12 +205,13 @@ async def summarize_with_rag(req: SummaryRequest):
 
 
 @router.post("/summarize-stream-rag", dependencies=[Depends(verify_api_key)])
-async def summarize_stream_with_rag(req: SummaryRequest):
+async def summarize_stream_with_rag(req: SummaryRequest, request: Request):
     """
     Stream RAG-enhanced SmartNote generation using SSE.
 
     Same as /summarize-stream but with dental knowledge retrieval
     for higher quality, reference-grounded SmartNotes.
+    Automatically stops generation when the client disconnects.
     """
     if not get_llm_model_path().exists():
         raise HTTPException(status_code=503, detail="Model not downloaded. Please run setup.")
@@ -225,11 +227,15 @@ async def summarize_stream_with_rag(req: SummaryRequest):
     llm = LocalLLM()
     prompt = build_rag_smartnote_prompt(sanitized_text, rag_context)
     rag_enhanced = bool(rag_context)
+    cancel = threading.Event()
 
     async def event_generator():
         try:
             yield f"data: {json.dumps({'rag_enhanced': rag_enhanced})}\n\n"
-            async for chunk in llm.generate_stream(prompt):
+            async for chunk in llm.generate_stream(prompt, cancel_event=cancel):
+                if await request.is_disconnected():
+                    cancel.set()
+                    break
                 yield f"data: {json.dumps({'chunk': chunk})}\n\n"
             yield "data: [DONE]\n\n"
         except Exception as e:

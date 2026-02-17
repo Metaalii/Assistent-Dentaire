@@ -7,8 +7,9 @@ POST /summarize-stream  — stream SmartNote generation via SSE
 
 import json
 import logging
+import threading
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -47,10 +48,11 @@ async def summarize(req: SummaryRequest):
 
 
 @router.post("/summarize-stream", dependencies=[Depends(verify_api_key)])
-async def summarize_stream(req: SummaryRequest):
+async def summarize_stream(req: SummaryRequest, request: Request):
     """
     Stream SmartNote generation using Server-Sent Events (SSE).
     Returns tokens as they are generated for reduced perceived latency.
+    Automatically stops generation when the client disconnects.
 
     Event format:
     - data: {"chunk": "token text"}  — for each generated token
@@ -67,10 +69,14 @@ async def summarize_stream(req: SummaryRequest):
 
     llm = LocalLLM()
     prompt = SMARTNOTE_PROMPT_OPTIMIZED.format(text=sanitized_text)
+    cancel = threading.Event()
 
     async def event_generator():
         try:
-            async for chunk in llm.generate_stream(prompt):
+            async for chunk in llm.generate_stream(prompt, cancel_event=cancel):
+                if await request.is_disconnected():
+                    cancel.set()
+                    break
                 yield f"data: {json.dumps({'chunk': chunk})}\n\n"
             yield "data: [DONE]\n\n"
         except Exception as e:
