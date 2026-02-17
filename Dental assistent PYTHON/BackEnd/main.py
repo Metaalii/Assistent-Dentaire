@@ -19,7 +19,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_hardware_info
-from app.middleware import MaxRequestSizeMiddleware, SimpleRateLimitMiddleware
+from app.middleware import MaxRequestSizeMiddleware, RateLimitMiddleware
 from app.security import check_api_key_configured, validate_security_config
 
 logging.basicConfig(level=logging.INFO)
@@ -81,7 +81,7 @@ app.add_middleware(
     allow_headers=["X-API-Key", "Content-Type"],
 )
 app.add_middleware(MaxRequestSizeMiddleware, max_bytes=100 * 1024 * 1024)
-app.add_middleware(SimpleRateLimitMiddleware)
+app.add_middleware(RateLimitMiddleware)
 
 # ---------------------------------------------------------------------------
 # Routers
