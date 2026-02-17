@@ -1,8 +1,9 @@
 """
-Health-check & status endpoints.
+Health-check, status & observability endpoints.
 
 GET /health     — quick liveness probe used by the Tauri frontend boot sequence.
 GET /llm/status — LLM inference queue status (concurrency, running, waiting).
+GET /metrics    — operational metrics: request counts, latency percentiles, recent errors.
 """
 
 import logging
@@ -79,3 +80,17 @@ async def llm_status():
 
     llm = LocalLLM()
     return llm.get_queue_status()
+
+
+@router.get("/metrics")
+async def metrics():
+    """
+    Operational metrics snapshot.
+
+    Returns per-endpoint request counts, latency percentiles (p50/p95/p99),
+    error rates, active request count, uptime, and a ring buffer of
+    recent 5xx errors with request IDs for correlation.
+    """
+    from app.observability import get_metrics
+
+    return get_metrics()
