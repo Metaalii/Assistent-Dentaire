@@ -9,6 +9,7 @@ GET  /setup/whisper-download-progress — SSE for Whisper download progress
 """
 
 import asyncio
+import hashlib
 import json
 import logging
 import os
@@ -139,8 +140,39 @@ def _ensure_parent_dir(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 
 
-def _is_model_valid(model_path: Path, expected_size_gb: float) -> bool:
-    """Check if the model file exists and has a reasonable size."""
+def _sha256_file(path: Path) -> str:
+    """Compute the SHA-256 hex digest of *path* using a streaming read."""
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(256 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _verify_sha256(path: Path, expected: str | None) -> bool:
+    """
+    If *expected* is set, verify the file's SHA-256 matches.
+    Returns True when the hash matches **or** when no expected hash is
+    configured (opt-in verification).
+    """
+    if not expected:
+        return True
+    actual = _sha256_file(path)
+    if actual != expected.lower():
+        logger.error(
+            "SHA-256 mismatch for %s: expected %s, got %s",
+            path.name, expected, actual,
+        )
+        return False
+    return True
+
+
+def _is_model_valid(
+    model_path: Path,
+    expected_size_gb: float,
+    expected_sha256: str | None = None,
+) -> bool:
+    """Check if the model file exists, has a reasonable size, and matches its checksum."""
     if not model_path.exists():
         return False
     file_size_gb = model_path.stat().st_size / (1024 ** 3)
@@ -151,6 +183,8 @@ def _is_model_valid(model_path: Path, expected_size_gb: float) -> bool:
             file_size_gb,
             expected_size_gb,
         )
+        return False
+    if not _verify_sha256(model_path, expected_sha256):
         return False
     return True
 
@@ -168,6 +202,11 @@ def _is_whisper_valid() -> bool:
     if model_bin.stat().st_size < 350 * 1024 * 1024:
         logger.warning("Whisper model.bin appears incomplete: %d bytes", model_bin.stat().st_size)
         return False
+    # Verify per-file checksums when configured
+    for file_info in WHISPER_MODEL_FILES:
+        fpath = model_dir / file_info["name"]
+        if fpath.exists() and not _verify_sha256(fpath, file_info.get("sha256")):
+            return False
     return True
 
 
@@ -175,9 +214,13 @@ def _is_whisper_valid() -> bool:
 # LLM download internals
 # ---------------------------------------------------------------------------
 
-def _atomic_download(url: str, dest_path: Path) -> None:
+def _atomic_download(
+    url: str,
+    dest_path: Path,
+    expected_sha256: str | None = None,
+) -> None:
     """
-    Stream download with progress tracking.
+    Stream download with progress tracking and optional SHA-256 verification.
     Writes to .part file then renames atomically.
     Progress is published via ``_llm_tracker`` for the SSE endpoint.
     """
@@ -192,6 +235,8 @@ def _atomic_download(url: str, dest_path: Path) -> None:
         if hf_token:
             headers["Authorization"] = f"Bearer {hf_token}"
 
+        sha256_hash = hashlib.sha256()
+
         with requests.get(url, headers=headers, stream=True, timeout=(10, 180)) as r:
             r.raise_for_status()
             total = int(r.headers.get("Content-Length", 0))
@@ -202,9 +247,22 @@ def _atomic_download(url: str, dest_path: Path) -> None:
                 for chunk in r.iter_content(chunk_size=chunk_size):
                     if chunk:
                         f.write(chunk)
+                        sha256_hash.update(chunk)
                         downloaded += len(chunk)
                         _llm_tracker.update(downloaded, total)
                 f.flush()
+
+        actual_hash = sha256_hash.hexdigest()
+        logger.info("Model SHA-256: %s", actual_hash)
+
+        if expected_sha256 and actual_hash != expected_sha256.lower():
+            msg = (
+                f"SHA-256 mismatch for {dest_path.name}: "
+                f"expected {expected_sha256}, got {actual_hash}"
+            )
+            logger.error(msg)
+            tmp_path.unlink(missing_ok=True)
+            raise ValueError(msg)
 
         tmp_path.replace(dest_path)
         _llm_tracker.finish()
@@ -231,6 +289,7 @@ def _download_whisper_files() -> None:
     """
     Download all Whisper model files into the whisper-small directory.
     Tracks cumulative progress across all files via ``_whisper_tracker``.
+    Each file is SHA-256-verified when a known hash is configured.
     """
     try:
         total_expected = int(
@@ -251,11 +310,13 @@ def _download_whisper_files() -> None:
         for file_info in WHISPER_MODEL_FILES:
             fname = file_info["name"]
             url = file_info["url"]
+            expected_sha = file_info.get("sha256")
             dest_file = dest_dir / fname
             tmp_file = dest_file.with_suffix(dest_file.suffix + ".part")
             file_estimate = int(file_info["size_mb"] * 1024 * 1024)
 
             logger.info("Downloading Whisper file: %s", fname)
+            file_hash = hashlib.sha256()
 
             with requests.get(url, headers=headers, stream=True, timeout=(10, 300)) as r:
                 r.raise_for_status()
@@ -272,11 +333,22 @@ def _download_whisper_files() -> None:
                     for chunk in r.iter_content(chunk_size=chunk_size):
                         if chunk:
                             f.write(chunk)
+                            file_hash.update(chunk)
                             cumulative += len(chunk)
                             _whisper_tracker.update(
                                 cumulative, adjusted_total, fname
                             )
                     f.flush()
+
+            actual_hash = file_hash.hexdigest()
+            logger.info("Whisper %s SHA-256: %s", fname, actual_hash)
+
+            if expected_sha and actual_hash != expected_sha.lower():
+                tmp_file.unlink(missing_ok=True)
+                raise ValueError(
+                    f"SHA-256 mismatch for {fname}: "
+                    f"expected {expected_sha}, got {actual_hash}"
+                )
 
             tmp_file.replace(dest_file)
             logger.info("Whisper file complete: %s", fname)
@@ -328,7 +400,7 @@ async def check_models():
     model_path = get_llm_model_path(profile)
     expected_size = cfg.get("size_gb", 0)
 
-    is_valid = _is_model_valid(model_path, expected_size)
+    is_valid = _is_model_valid(model_path, expected_size, cfg.get("sha256"))
     alternatives = ALTERNATIVE_MODELS.get(profile, [])
     whisper_valid = _is_whisper_valid()
 
@@ -366,7 +438,9 @@ async def download_model(background_tasks: BackgroundTasks):
     model_path = get_llm_model_path(profile)
     expected_size = cfg.get("size_gb", 0)
 
-    if _is_model_valid(model_path, expected_size):
+    expected_sha256 = cfg.get("sha256")
+
+    if _is_model_valid(model_path, expected_size, expected_sha256):
         return {"status": "already_exists"}
 
     if not _llm_tracker.try_start():
@@ -377,7 +451,7 @@ async def download_model(background_tasks: BackgroundTasks):
         model_path.unlink()
 
     url = cfg["url"]
-    background_tasks.add_task(_atomic_download, url, model_path)
+    background_tasks.add_task(_atomic_download, url, model_path, expected_sha256)
     return {"status": "started", "profile": profile}
 
 

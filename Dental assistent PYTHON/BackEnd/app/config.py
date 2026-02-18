@@ -69,10 +69,10 @@ def ensure_models_dir() -> Path:
 _WHISPER_HF_BASE = "https://huggingface.co/Systran/faster-whisper-small/resolve/main"
 
 WHISPER_MODEL_FILES = [
-    {"name": "config.json",     "url": f"{_WHISPER_HF_BASE}/config.json",     "size_mb": 0.002},
-    {"name": "model.bin",       "url": f"{_WHISPER_HF_BASE}/model.bin",       "size_mb": 461},
-    {"name": "tokenizer.json",  "url": f"{_WHISPER_HF_BASE}/tokenizer.json",  "size_mb": 2.2},
-    {"name": "vocabulary.txt",  "url": f"{_WHISPER_HF_BASE}/vocabulary.txt",  "size_mb": 0.8},
+    {"name": "config.json",     "url": f"{_WHISPER_HF_BASE}/config.json",     "size_mb": 0.002, "sha256": None},
+    {"name": "model.bin",       "url": f"{_WHISPER_HF_BASE}/model.bin",       "size_mb": 461,   "sha256": None},
+    {"name": "tokenizer.json",  "url": f"{_WHISPER_HF_BASE}/tokenizer.json",  "size_mb": 2.2,   "sha256": None},
+    {"name": "vocabulary.txt",  "url": f"{_WHISPER_HF_BASE}/vocabulary.txt",  "size_mb": 0.8,   "sha256": None},
 ]
 
 WHISPER_EXPECTED_SIZE_MB = 464  # approximate total
@@ -233,18 +233,21 @@ MODEL_CONFIGS = {
         "url": "https://huggingface.co/bartowski/Meta-Llama-3-8B-Instruct-GGUF/resolve/main/Meta-Llama-3-8B-Instruct-Q6_K.gguf",
         "filename": "Meta-Llama-3-8B-Instruct-Q6_K.gguf",
         "size_gb": 6.6,
+        "sha256": None,  # populate with hex digest from HuggingFace
         "description": "Highest quality, best for powerful GPUs (≥8GB VRAM)",
     },
     "low_vram": {
         "url": "https://huggingface.co/bartowski/Meta-Llama-3-8B-Instruct-GGUF/resolve/main/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf",
         "filename": "Meta-Llama-3-8B-Instruct-Q4_K_M.gguf",
         "size_gb": 4.9,
+        "sha256": None,  # populate with hex digest from HuggingFace
         "description": "Balanced quality and speed",
     },
     "cpu_only": {
         "url": "https://huggingface.co/bartowski/Meta-Llama-3-8B-Instruct-GGUF/resolve/main/Meta-Llama-3-8B-Instruct-Q4_K_S.gguf",
         "filename": "Meta-Llama-3-8B-Instruct-Q4_K_S.gguf",
         "size_gb": 4.6,
+        "sha256": None,  # populate with hex digest from HuggingFace
         "description": "Optimized for CPU, smallest size",
     },
 }
