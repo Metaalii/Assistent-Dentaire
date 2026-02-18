@@ -120,29 +120,42 @@ class DentalRAGPipeline:
         """
         Save a completed SmartNote to the consultation archive.
 
-        Stores both the SmartNote and transcription as searchable content.
+        Write order (write-ahead):
+        1. Append to the JSONL journal — the durable, authoritative record.
+        2. Index into ChromaDB — the searchable vector index (rebuildable).
         """
         if not self._initialized:
             return {"status": "error", "detail": "RAG not initialized"}
 
         now = datetime.now()
-        # Combine SmartNote and transcription for richer semantic search
+
+        record = {
+            "smartnote": smartnote,
+            "transcription": transcription,
+            "dentist_name": dentist_name,
+            "consultation_type": consultation_type,
+            "patient_id": patient_id,
+            "date": now.isoformat(),
+            "date_display": now.strftime("%d/%m/%Y %H:%M"),
+        }
+
+        # --- 1. Journal (durable flat-file) ---------------------------------
+        from app.rag.journal import append as journal_append
+
+        try:
+            journal_append(record)
+        except Exception:
+            logger.exception("CRITICAL: journal write failed — aborting save")
+            return {"status": "error", "detail": "Failed to write backup journal"}
+
+        # --- 2. ChromaDB index (rebuildable) ---------------------------------
         content = smartnote
         if transcription:
             content = f"{smartnote}\n\n---\nTranscription:\n{transcription}"
 
         doc = Document(
             content=content,
-            meta={
-                "type": "consultation",
-                "smartnote": smartnote,
-                "transcription": transcription,
-                "dentist_name": dentist_name,
-                "consultation_type": consultation_type,
-                "patient_id": patient_id,
-                "date": now.isoformat(),
-                "date_display": now.strftime("%d/%m/%Y %H:%M"),
-            },
+            meta={"type": "consultation", **record},
         )
 
         try:
@@ -150,10 +163,13 @@ class DentalRAGPipeline:
                 {"embedder": {"documents": [doc]}}
             )
             logger.info("Consultation saved: %s", now.isoformat())
-            return {"status": "saved", "date": now.isoformat()}
         except Exception as e:
-            logger.exception("Failed to save consultation")
-            return {"status": "error", "detail": str(e)}
+            # The journal already has the record — ChromaDB can be rebuilt.
+            logger.exception(
+                "ChromaDB indexing failed (journal has the record): %s", e
+            )
+
+        return {"status": "saved", "date": now.isoformat()}
 
     def search_consultations(self, query: str, top_k: int = 10) -> list[dict]:
         """
@@ -189,6 +205,50 @@ class DentalRAGPipeline:
         except Exception as e:
             logger.exception("Consultation search failed")
             return []
+
+    def rebuild_from_journal(self) -> dict:
+        """
+        Rebuild the ChromaDB consultation index from the JSONL journal.
+
+        Useful when ChromaDB files are corrupted or missing while the
+        journal is intact.  Returns counts of processed / skipped records.
+        """
+        from app.rag.journal import read_all as journal_read_all
+
+        if not self._initialized:
+            return {"status": "error", "detail": "RAG not initialized"}
+
+        records = journal_read_all()
+        if not records:
+            return {"status": "ok", "indexed": 0, "skipped": 0}
+
+        indexed = 0
+        skipped = 0
+        for rec in records:
+            smartnote = rec.get("smartnote", "")
+            if not smartnote:
+                skipped += 1
+                continue
+            transcription = rec.get("transcription", "")
+            content = smartnote
+            if transcription:
+                content = f"{smartnote}\n\n---\nTranscription:\n{transcription}"
+
+            doc = Document(
+                content=content,
+                meta={"type": "consultation", **rec},
+            )
+            try:
+                self._consultation_indexer.run(
+                    {"embedder": {"documents": [doc]}}
+                )
+                indexed += 1
+            except Exception:
+                logger.warning("Failed to index journal record dated %s", rec.get("date"))
+                skipped += 1
+
+        logger.info("Journal rebuild: %d indexed, %d skipped", indexed, skipped)
+        return {"status": "ok", "indexed": indexed, "skipped": skipped}
 
     # ------------------------------------------------------------------
     # Knowledge base pipelines

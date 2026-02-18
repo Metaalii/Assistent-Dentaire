@@ -191,6 +191,8 @@ export const translations = {
     viewFullNote: "View full note",
     closeNote: "Close",
     consultationSaved: "Saved to history",
+    exportJSON: "Export JSON",
+    exporting: "Exporting\u2026",
 
     // Confirmation dialogs
     cancel: "Cancel",
@@ -399,6 +401,8 @@ export const translations = {
     viewFullNote: "Voir la note",
     closeNote: "Fermer",
     consultationSaved: "Sauvegarde dans l'historique",
+    exportJSON: "Exporter JSON",
+    exporting: "Export en cours\u2026",
 
     // Confirmation dialogs
     cancel: "Annuler",

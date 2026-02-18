@@ -490,6 +490,29 @@ export async function searchConsultations(query: string, topK: number = 10): Pro
   });
 }
 
+export interface ExportResponse {
+  consultations: Array<{
+    smartnote: string;
+    transcription: string;
+    date: string;
+    date_display: string;
+    dentist_name: string;
+    consultation_type: string;
+    patient_id: string;
+  }>;
+  count: number;
+}
+
+export async function exportConsultations(): Promise<ExportResponse> {
+  return deduplicated("exportConsultations", async () => {
+    const res = await fetchWithRetry(`${BASE_URL}/consultations/export`, {
+      headers: await authHeaders(),
+    });
+    if (!res.ok) throw new Error(await safeError(res));
+    return res.json();
+  });
+}
+
 /**
  * Stream RAG-enhanced SmartNote generation using SSE.
  * Falls back to standard summarization if RAG is unavailable.

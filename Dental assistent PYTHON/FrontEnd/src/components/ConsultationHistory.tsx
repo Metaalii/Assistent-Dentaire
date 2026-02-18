@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { searchConsultations, getRAGStatus, type ConsultationResult, type RAGStatus } from "../api";
+import { searchConsultations, getRAGStatus, exportConsultations, type ConsultationResult, type RAGStatus } from "../api";
 import { useLanguage, useTheme } from "../i18n";
 import {
   Button,
@@ -107,6 +107,28 @@ export default function ConsultationHistory({ onBack }: ConsultationHistoryProps
   const [error, setError] = useState<string | null>(null);
   const [ragStatus, setRagStatus] = useState<RAGStatus | null>(null);
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExport = useCallback(async () => {
+    setIsExporting(true);
+    try {
+      const data = await exportConsultations();
+      const blob = new Blob(
+        [JSON.stringify(data.consultations, null, 2)],
+        { type: "application/json" },
+      );
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `consultations-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Export failed");
+    } finally {
+      setIsExporting(false);
+    }
+  }, []);
 
   // Load RAG status and recent consultations on mount
   useEffect(() => {
@@ -203,6 +225,16 @@ export default function ConsultationHistory({ onBack }: ConsultationHistoryProps
                     {ragStatus.knowledge_count} {t("knowledgeCount")}
                   </Badge>
                 </>
+              )}
+              {ragStatus?.available && ragStatus.consultations_count > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleExport}
+                  disabled={isExporting}
+                >
+                  {isExporting ? t("exporting") : t("exportJSON")}
+                </Button>
               )}
               <button
                 onClick={toggleTheme}
