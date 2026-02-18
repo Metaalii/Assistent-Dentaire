@@ -3,33 +3,8 @@ import { useLanguage } from "../i18n";
 import { Language } from "../i18n/translations";
 import { ToothIcon, HeartPulseIcon } from "./ui/Icons";
 import { Button } from "./ui";
-
-// Flag components
-const FlagUK: React.FC<{ className?: string }> = ({ className }) => (
-  <svg className={className} viewBox="0 0 60 30" width="32" height="16">
-    <clipPath id="s">
-      <path d="M0,0 v30 h60 v-30 z" />
-    </clipPath>
-    <clipPath id="t">
-      <path d="M30,15 h30 v15 z v15 h-30 z h-30 v-15 z v-15 h30 z" />
-    </clipPath>
-    <g clipPath="url(#s)">
-      <path d="M0,0 v30 h60 v-30 z" fill="#012169" />
-      <path d="M0,0 L60,30 M60,0 L0,30" stroke="#fff" strokeWidth="6" />
-      <path d="M0,0 L60,30 M60,0 L0,30" clipPath="url(#t)" stroke="#C8102E" strokeWidth="4" />
-      <path d="M30,0 v30 M0,15 h60" stroke="#fff" strokeWidth="10" />
-      <path d="M30,0 v30 M0,15 h60" stroke="#C8102E" strokeWidth="6" />
-    </g>
-  </svg>
-);
-
-const FlagFrance: React.FC<{ className?: string }> = ({ className }) => (
-  <svg className={className} viewBox="0 0 3 2" width="32" height="21">
-    <rect width="1" height="2" fill="#002395" />
-    <rect x="1" width="1" height="2" fill="#fff" />
-    <rect x="2" width="1" height="2" fill="#ED2939" />
-  </svg>
-);
+import flagUkUrl from "../assets/flags/flag-uk.svg";
+import flagFranceUrl from "../assets/flags/flag-france.svg";
 
 interface LanguageSelectorProps {
   onComplete: () => void;
@@ -89,7 +64,7 @@ const LanguageSelector: React.FC<LanguageSelectorProps> = ({ onComplete }) => {
             }`}
           >
             <div className="w-12 h-8 rounded overflow-hidden shadow-sm flex items-center justify-center bg-gray-100 dark:bg-[#334155]">
-              <FlagUK />
+              <img src={flagUkUrl} alt="UK flag" width="32" height="16" />
             </div>
             <div className="flex-1 text-left">
               <p className={`font-semibold ${language === "en" ? "text-[#2d96c6]" : "text-[#1e293b] dark:text-[#e2e8f0]"}`}>
@@ -116,7 +91,7 @@ const LanguageSelector: React.FC<LanguageSelectorProps> = ({ onComplete }) => {
             }`}
           >
             <div className="w-12 h-8 rounded overflow-hidden shadow-sm flex items-center justify-center bg-gray-100 dark:bg-[#334155]">
-              <FlagFrance />
+              <img src={flagFranceUrl} alt="France flag" width="32" height="21" />
             </div>
             <div className="flex-1 text-left">
               <p className={`font-semibold ${language === "fr" ? "text-[#2d96c6]" : "text-[#1e293b] dark:text-[#e2e8f0]"}`}>
