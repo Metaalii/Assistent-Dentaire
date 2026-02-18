@@ -3,6 +3,68 @@ import { invoke } from "@tauri-apps/api/core";
 // Use environment variable for backend URL, fallback to default
 const BASE_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:9000";
 
+// ---------------------------------------------------------------------------
+// Resilience: retry with backoff, request deduplication, response caching
+// ---------------------------------------------------------------------------
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/**
+ * Fetch wrapper that retries on network errors and 5xx responses.
+ * Does NOT retry 4xx client errors (auth failures, validation, etc.).
+ */
+async function fetchWithRetry(
+  input: string | URL,
+  init?: RequestInit,
+  retries = 2,
+  baseDelayMs = 500,
+): Promise<Response> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(input, init);
+      if (res.ok || (res.status >= 400 && res.status < 500)) return res;
+      lastError = new Error(`HTTP ${res.status}`);
+    } catch (err) {
+      lastError = err;
+    }
+    if (attempt < retries) {
+      await sleep(baseDelayMs * 2 ** attempt);
+    }
+  }
+  throw lastError;
+}
+
+/** In-flight deduplication: concurrent identical calls share one Promise. */
+const _inflight = new Map<string, Promise<unknown>>();
+
+function deduplicated<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const existing = _inflight.get(key);
+  if (existing) return existing as Promise<T>;
+  const p = fn().finally(() => _inflight.delete(key));
+  _inflight.set(key, p);
+  return p;
+}
+
+/** Simple TTL cache for read-only status endpoints. */
+const _cache = new Map<string, { data: unknown; exp: number }>();
+const STATUS_CACHE_TTL = 5_000;
+
+function withCache<T>(key: string, ttlMs: number, fn: () => Promise<T>): Promise<T> {
+  const hit = _cache.get(key);
+  if (hit && Date.now() < hit.exp) return Promise.resolve(hit.data as T);
+  return fn().then((data) => {
+    _cache.set(key, { data, exp: Date.now() + ttlMs });
+    return data;
+  });
+}
+
+/** Invalidate one or all cached entries (call after mutations). */
+export function invalidateCache(key?: string): void {
+  if (key) _cache.delete(key);
+  else _cache.clear();
+}
+
 // Default development API key for local development
 // This is safe because the app runs entirely on localhost
 const DEFAULT_DEV_KEY = "dental-assistant-local-dev-key";
@@ -50,31 +112,36 @@ export interface HardwareInfo {
 }
 
 export async function transcribeAudio(file: File, language?: string): Promise<TranscribeResponse> {
-  const form = new FormData();
-  form.append("file", file);
-  if (language) {
-    form.append("language", language);
-  }
+  const key = `transcribe:${file.name}:${file.size}:${file.lastModified}:${language ?? ""}`;
+  return deduplicated(key, async () => {
+    const form = new FormData();
+    form.append("file", file);
+    if (language) {
+      form.append("language", language);
+    }
 
-  const res = await fetch(`${BASE_URL}/transcribe`, {
-    method: "POST",
-    headers: await authHeaders(),
-    body: form,
+    const res = await fetchWithRetry(`${BASE_URL}/transcribe`, {
+      method: "POST",
+      headers: await authHeaders(),
+      body: form,
+    });
+
+    if (!res.ok) throw new Error(await safeError(res));
+    return res.json();
   });
-
-  if (!res.ok) throw new Error(await safeError(res));
-  return res.json();
 }
 
 export async function summarizeText(text: string): Promise<SummarizeResponse> {
-  const res = await fetch(`${BASE_URL}/summarize`, {
-    method: "POST",
-    headers: await authHeaders({ "Content-Type": "application/json" }),
-    body: JSON.stringify({ text }),
-  });
+  return deduplicated(`summarize:${text.length}:${text.slice(0, 80)}`, async () => {
+    const res = await fetchWithRetry(`${BASE_URL}/summarize`, {
+      method: "POST",
+      headers: await authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ text }),
+    });
 
-  if (!res.ok) throw new Error(await safeError(res));
-  return res.json();
+    if (!res.ok) throw new Error(await safeError(res));
+    return res.json();
+  });
 }
 
 /**
@@ -95,7 +162,7 @@ export async function summarizeTextStream(
   const headers = await authHeaders({ "Content-Type": "application/json" });
 
   try {
-    const res = await fetch(`${BASE_URL}/summarize-stream`, {
+    const res = await fetchWithRetry(`${BASE_URL}/summarize-stream`, {
       method: "POST",
       headers,
       body: JSON.stringify({ text }),
@@ -185,11 +252,14 @@ export async function summarizeTextStream(
 }
 
 export async function checkModelStatus(): Promise<HardwareInfo> {
-  // Include auth headers for consistency (endpoint may require auth in future)
-  const headers = await authHeaders();
-  const res = await fetch(`${BASE_URL}/setup/check-models`, { headers });
-  if (!res.ok) throw new Error(await safeError(res));
-  return res.json();
+  return withCache("checkModelStatus", STATUS_CACHE_TTL, () =>
+    deduplicated("checkModelStatus", async () => {
+      const headers = await authHeaders();
+      const res = await fetchWithRetry(`${BASE_URL}/setup/check-models`, { headers });
+      if (!res.ok) throw new Error(await safeError(res));
+      return res.json();
+    }),
+  );
 }
 
 export interface DownloadProgress {
@@ -257,23 +327,27 @@ export function subscribeDownloadProgress(
 }
 
 export async function downloadModel(): Promise<{ status: string }> {
-  const res = await fetch(`${BASE_URL}/setup/download-model`, {
-    method: "POST",
-    headers: await authHeaders(),
+  return deduplicated("downloadModel", async () => {
+    const res = await fetchWithRetry(`${BASE_URL}/setup/download-model`, {
+      method: "POST",
+      headers: await authHeaders(),
+    }, 1);
+    if (!res.ok) throw new Error(await safeError(res));
+    invalidateCache("checkModelStatus");
+    return res.json();
   });
-
-  if (!res.ok) throw new Error(await safeError(res));
-  return res.json();
 }
 
 export async function downloadWhisper(): Promise<{ status: string }> {
-  const res = await fetch(`${BASE_URL}/setup/download-whisper`, {
-    method: "POST",
-    headers: await authHeaders(),
+  return deduplicated("downloadWhisper", async () => {
+    const res = await fetchWithRetry(`${BASE_URL}/setup/download-whisper`, {
+      method: "POST",
+      headers: await authHeaders(),
+    }, 1);
+    if (!res.ok) throw new Error(await safeError(res));
+    invalidateCache("checkModelStatus");
+    return res.json();
   });
-
-  if (!res.ok) throw new Error(await safeError(res));
-  return res.json();
 }
 
 export interface WhisperDownloadProgress extends DownloadProgress {
@@ -374,31 +448,46 @@ export interface SaveConsultationRequest {
 }
 
 export async function getRAGStatus(): Promise<RAGStatus> {
-  const res = await fetch(`${BASE_URL}/rag/status`, {
-    headers: await authHeaders(),
-  });
-  if (!res.ok) throw new Error(await safeError(res));
-  return res.json();
+  return withCache("ragStatus", STATUS_CACHE_TTL, () =>
+    deduplicated("ragStatus", async () => {
+      const res = await fetchWithRetry(`${BASE_URL}/rag/status`, {
+        headers: await authHeaders(),
+      });
+      if (!res.ok) throw new Error(await safeError(res));
+      return res.json();
+    }),
+  );
 }
 
 export async function saveConsultation(data: SaveConsultationRequest): Promise<{ status: string }> {
-  const res = await fetch(`${BASE_URL}/consultations/save`, {
-    method: "POST",
-    headers: await authHeaders({ "Content-Type": "application/json" }),
-    body: JSON.stringify(data),
+  const body = JSON.stringify(data);
+  return deduplicated(`saveConsultation:${body.length}:${body.slice(0, 80)}`, async () => {
+    const res = await fetchWithRetry(
+      `${BASE_URL}/consultations/save`,
+      {
+        method: "POST",
+        headers: await authHeaders({ "Content-Type": "application/json" }),
+        body,
+      },
+      3,     // 3 retries — don't lose the user's work
+      1_000, // 1s base delay (1s, 2s, 4s, 8s backoff)
+    );
+    if (!res.ok) throw new Error(await safeError(res));
+    invalidateCache("ragStatus");
+    return res.json();
   });
-  if (!res.ok) throw new Error(await safeError(res));
-  return res.json();
 }
 
 export async function searchConsultations(query: string, topK: number = 10): Promise<SearchResponse> {
-  const res = await fetch(`${BASE_URL}/consultations/search`, {
-    method: "POST",
-    headers: await authHeaders({ "Content-Type": "application/json" }),
-    body: JSON.stringify({ query, top_k: topK }),
+  return deduplicated(`search:${query}:${topK}`, async () => {
+    const res = await fetchWithRetry(`${BASE_URL}/consultations/search`, {
+      method: "POST",
+      headers: await authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ query, top_k: topK }),
+    });
+    if (!res.ok) throw new Error(await safeError(res));
+    return res.json();
   });
-  if (!res.ok) throw new Error(await safeError(res));
-  return res.json();
 }
 
 /**
@@ -415,7 +504,7 @@ export async function summarizeTextStreamRAG(
   const headers = await authHeaders({ "Content-Type": "application/json" });
 
   try {
-    const res = await fetch(`${BASE_URL}/summarize-stream-rag`, {
+    const res = await fetchWithRetry(`${BASE_URL}/summarize-stream-rag`, {
       method: "POST",
       headers,
       body: JSON.stringify({ text }),
