@@ -16,7 +16,7 @@ import {
   ProgressBar,
   Alert,
   Badge,
-  MedicalLoader,
+  Skeleton,
 } from "./ui";
 import {
   ToothIcon,
@@ -353,12 +353,35 @@ export default function ModelSetup({ onReady }: Props) {
   // RENDER: CHECKING STATE
   // ============================================
   const renderChecking = () => (
-    <Card glass className="text-center">
-      <CardBody className="py-12">
-        <MedicalLoader text={t("analyzingHardware") as string} />
-        <p className="mt-6 text-sm text-[#94a3b8] dark:text-[#64748b]">
-          {t("systemRequirements")}
-        </p>
+    <Card glass>
+      <CardBody className="py-8 space-y-6">
+        {/* Skeleton mimicking hardware info card */}
+        <div className="bg-gradient-to-br from-[#f8fafc] to-[#f0f7fc] dark:from-[#0f172a] dark:to-[#1e293b] rounded-2xl p-5 border border-[#e2e8f0] dark:border-[#334155]">
+          <div className="flex items-start gap-4">
+            <Skeleton variant="rectangular" width={48} height={48} />
+            <div className="flex-1 space-y-3">
+              <div className="flex items-center gap-2">
+                <Skeleton width="40%" height={16} />
+                <Skeleton width={80} height={22} variant="rectangular" />
+              </div>
+              <Skeleton width="70%" height={14} />
+              <Skeleton width="50%" height={12} />
+            </div>
+          </div>
+        </div>
+
+        {/* Skeleton mimicking feature cards row */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="rounded-xl p-4 border border-[#e2e8f0] dark:border-[#334155] flex flex-col items-center gap-3">
+              <Skeleton variant="rectangular" width={40} height={40} />
+              <Skeleton width="70%" height={14} />
+            </div>
+          ))}
+        </div>
+
+        {/* Skeleton mimicking action button */}
+        <Skeleton variant="rectangular" width="100%" height={42} />
       </CardBody>
     </Card>
   );

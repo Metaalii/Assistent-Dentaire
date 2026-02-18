@@ -4,11 +4,10 @@ import { useLanguage, useTheme } from "../i18n";
 import {
   Button,
   Card,
-  CardHeader,
   CardBody,
   Alert,
   Badge,
-  MedicalLoader,
+  Skeleton,
   Container,
 } from "./ui";
 import {
@@ -260,8 +259,25 @@ export default function ConsultationHistory({ onBack }: ConsultationHistoryProps
 
             {/* Loading */}
             {isSearching && (
-              <div className="flex justify-center py-12">
-                <MedicalLoader />
+              <div className="space-y-4">
+                {[0, 1, 2].map((i) => (
+                  <Card key={i}>
+                    <CardBody>
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 space-y-3">
+                          <div className="flex items-center gap-3">
+                            <Skeleton width={120} height={14} />
+                            <Skeleton width={80} height={22} variant="rectangular" />
+                          </div>
+                          <Skeleton width="100%" height={14} />
+                          <Skeleton width="95%" height={14} />
+                          <Skeleton width="75%" height={14} />
+                        </div>
+                        <Skeleton width={90} height={32} variant="rectangular" />
+                      </div>
+                    </CardBody>
+                  </Card>
+                ))}
               </div>
             )}
 

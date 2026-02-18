@@ -9,7 +9,7 @@ import {
   CardBody,
   Alert,
   Badge,
-  MedicalLoader,
+  Skeleton,
   Container,
 } from "./ui";
 import {
@@ -589,36 +589,47 @@ const ProcessingIndicator: React.FC = React.memo(() => {
   const { t } = useLanguage();
 
   return (
-    <Card>
-      <CardBody className="py-10">
-        <div className="flex flex-col items-center">
-          <MedicalLoader />
-          <h3 className="mt-6 text-lg font-semibold text-[#1e293b] dark:text-white">
-            {t("processingAudioTitle")}
-          </h3>
-          <p className="mt-2 text-[#64748b] dark:text-[#94a3b8] text-center max-w-md">
-            {t("processingAudioDesc")}
-          </p>
-
-          {/* Processing steps */}
-          <div className="mt-8 flex items-center gap-8">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#2d96c6] to-[#1e7aa8] flex items-center justify-center">
-                <WaveformIcon className="text-white" size={16} />
-              </div>
-              <span className="text-sm font-medium text-[#2d96c6]">{t("transcribingStep")}</span>
-            </div>
-            <div className="w-8 h-0.5 bg-[#e2e8f0] dark:bg-[#334155] rounded" />
-            <div className="flex items-center gap-2 opacity-50">
-              <div className="w-8 h-8 rounded-lg bg-[#e2e8f0] dark:bg-[#334155] flex items-center justify-center">
-                <SparklesIcon className="text-[#94a3b8]" size={16} />
-              </div>
-              <span className="text-sm font-medium text-[#94a3b8]">{t("summarizingStep")}</span>
-            </div>
+    <div className="space-y-6">
+      {/* Processing steps indicator */}
+      <div className="flex items-center justify-center gap-8">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#2d96c6] to-[#1e7aa8] flex items-center justify-center">
+            <WaveformIcon className="text-white" size={16} />
           </div>
+          <span className="text-sm font-medium text-[#2d96c6]">{t("transcribingStep")}</span>
         </div>
-      </CardBody>
-    </Card>
+        <div className="w-8 h-0.5 bg-[#e2e8f0] dark:bg-[#334155] rounded" />
+        <div className="flex items-center gap-2 opacity-50">
+          <div className="w-8 h-8 rounded-lg bg-[#e2e8f0] dark:bg-[#334155] flex items-center justify-center">
+            <SparklesIcon className="text-[#94a3b8]" size={16} />
+          </div>
+          <span className="text-sm font-medium text-[#94a3b8]">{t("summarizingStep")}</span>
+        </div>
+      </div>
+
+      {/* Skeleton preview of the document card */}
+      <Card>
+        <CardHeader icon={<DocumentIcon className="text-white" size={20} />}>
+          <div>
+            <Skeleton width="60%" height={16} />
+            <Skeleton className="mt-2" width="40%" height={12} />
+          </div>
+        </CardHeader>
+        <CardBody>
+          <div className="space-y-3">
+            <Skeleton width="100%" height={14} />
+            <Skeleton width="95%" height={14} />
+            <Skeleton width="88%" height={14} />
+            <Skeleton width="92%" height={14} />
+            <div className="pt-2" />
+            <Skeleton width="100%" height={14} />
+            <Skeleton width="80%" height={14} />
+            <Skeleton width="96%" height={14} />
+            <Skeleton width="70%" height={14} />
+          </div>
+        </CardBody>
+      </Card>
+    </div>
   );
 });
 
@@ -658,18 +669,12 @@ const ResultCard: React.FC<ResultCardProps> = React.memo(({
       </CardHeader>
       <CardBody className="flex-1">
         {isPending ? (
-          <div className="flex items-center justify-center py-8">
-            <div className="flex flex-col items-center gap-3">
-              <div
-                className={`
-                  w-10 h-10 rounded-xl bg-gradient-to-br ${gradientFrom} ${gradientTo}
-                  flex items-center justify-center animate-pulse
-                `}
-              >
-                {icon}
-              </div>
-              <p className="text-sm text-[#94a3b8]">{t("generating")}</p>
-            </div>
+          <div className="space-y-3 py-2">
+            <Skeleton width="100%" height={14} />
+            <Skeleton width="92%" height={14} />
+            <Skeleton width="85%" height={14} />
+            <Skeleton width="96%" height={14} />
+            <Skeleton width="70%" height={14} />
           </div>
         ) : (
           <div className="prose prose-sm max-w-none">
