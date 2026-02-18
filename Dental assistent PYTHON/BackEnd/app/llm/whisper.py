@@ -4,9 +4,8 @@ import threading
 from pathlib import Path
 from typing import Optional
 
-from fastapi import HTTPException
-
 from app.config import WHISPER_MODEL_PATH, get_device_settings, get_hardware_info
+from app.errors import AppError, MODEL_WHISPER_NOT_FOUND, MODEL_WHISPER_EMPTY, MODEL_WHISPER_DEP_MISSING
 from app.llm_config import WHISPER_CONFIG, WHISPER_WORKERS, WHISPER_DEFAULT_LANGUAGE
 
 logger = logging.getLogger("dental_assistant.whisper")
@@ -42,16 +41,16 @@ class LocalWhisper:
         """Ensure Whisper model directory exists and contains model files."""
         model_path = Path(WHISPER_MODEL_PATH)
         if not model_path.exists():
-            raise HTTPException(
-                status_code=503,
-                detail=f"Whisper model directory not found at {model_path}. Please download the model first.",
+            raise AppError(
+                MODEL_WHISPER_NOT_FOUND,
+                detail=f"Expected at {model_path}",
             )
 
         # Check if model files actually exist (directory could be empty)
         if not any(model_path.iterdir()):
-            raise HTTPException(
-                status_code=503,
-                detail=f"Whisper model directory exists but is empty at {model_path}. Please download the model files.",
+            raise AppError(
+                MODEL_WHISPER_EMPTY,
+                detail=f"Directory is empty: {model_path}",
             )
 
     def _load_model_if_needed(self) -> None:
@@ -68,10 +67,7 @@ class LocalWhisper:
             try:
                 from faster_whisper import WhisperModel  # type: ignore
             except Exception as e:
-                raise HTTPException(
-                    status_code=503,
-                    detail="Whisper dependency not installed (faster-whisper). Install it to enable transcription.",
-                ) from e
+                raise AppError(MODEL_WHISPER_DEP_MISSING) from e
 
             device, compute_type = get_device_settings()
             hw_info = get_hardware_info()
