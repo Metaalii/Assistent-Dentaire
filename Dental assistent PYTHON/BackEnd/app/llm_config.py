@@ -197,3 +197,48 @@ COMBINE_SUMMARIES_PROMPT = _llama3_prompt(
         "- Admin : ..."
     ),
 )
+
+
+# ============================================
+# RAG-AUGMENTED PROMPT (Llama-3 Instruct format)
+# ============================================
+# Used when dental knowledge context is available from the RAG pipeline.
+# The context provides guidelines, drug interactions, and protocols
+# that ground the SmartNote in verified medical references.
+
+def build_rag_smartnote_prompt(transcription: str, rag_context: str) -> str:
+    """
+    Build a RAG-augmented SmartNote prompt with retrieved dental knowledge.
+
+    If rag_context is empty, falls back to the standard prompt.
+    """
+    if not rag_context:
+        return SMARTNOTE_PROMPT_OPTIMIZED.format(text=transcription)
+
+    return _llama3_prompt(
+        system=(
+            "Tu es un assistant de documentation dentaire expert. "
+            "Tu generes des SmartNotes concises et structurees en francais "
+            "a partir de transcriptions de consultations. "
+            "Tu disposes de references medicales pertinentes pour enrichir "
+            "et verifier tes recommandations. "
+            "Utilise les references pour verifier les protocoles mentionnes, "
+            "signaler les risques medicamenteux et enrichir les recommandations. "
+            "Reponds uniquement avec la SmartNote au format demande."
+        ),
+        user=(
+            "Genere une SmartNote (5-10 lignes) pour cette consultation.\n\n"
+            "References medicales pertinentes:\n"
+            f"{rag_context}\n\n"
+            "Format:\n"
+            "- Motif : [raison consultation]\n"
+            "- Antecedents : [historique pertinent]\n"
+            "- Examen : [observations cliniques]\n"
+            "- Plan : [traitements proposes]\n"
+            "- Risques : [risques identifies, interactions medicamenteuses]\n"
+            "- Recommandations : [conseils patient, appuyes par les references]\n"
+            "- Prochain RDV : [prochaine etape]\n"
+            "- Admin : [devis/paiement si mentionne]\n\n"
+            f"Transcription:\n{transcription}"
+        ),
+    )

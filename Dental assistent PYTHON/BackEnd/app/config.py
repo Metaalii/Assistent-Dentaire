@@ -51,6 +51,9 @@ MODELS_DIR = user_data_dir() / "models"
 # Whisper model path (fixed location)
 WHISPER_MODEL_PATH = MODELS_DIR / "whisper-small"
 
+# RAG data directory (ChromaDB vector stores)
+RAG_DATA_DIR = user_data_dir() / "rag_data"
+
 
 def ensure_models_dir() -> Path:
     """Create MODELS_DIR on disk if it doesn't exist yet. Returns the path."""
