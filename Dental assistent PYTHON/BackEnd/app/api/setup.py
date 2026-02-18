@@ -36,29 +36,93 @@ router = APIRouter(prefix="/setup", tags=["setup"])
 logger = logging.getLogger("dental_assistant.setup")
 
 # ---------------------------------------------------------------------------
-# Download state tracking & concurrency locks
+# Thread-safe download progress tracker
 # ---------------------------------------------------------------------------
-_download_lock = threading.Lock()
-_whisper_download_lock = threading.Lock()
 
-_download_state: dict = {
-    "active": False,
-    "progress": 0.0,
-    "downloaded_bytes": 0,
-    "total_bytes": 0,
-    "error": None,
-    "done": False,
-}
 
-_whisper_download_state: dict = {
-    "active": False,
-    "progress": 0.0,
-    "downloaded_bytes": 0,
-    "total_bytes": 0,
-    "current_file": "",
-    "error": None,
-    "done": False,
-}
+class DownloadTracker:
+    """
+    Encapsulates download state behind a lock so that background-thread
+    writers and async SSE readers never see torn state.
+
+    ``try_start()`` is an atomic check-and-set that prevents two
+    concurrent POST requests from both launching a download.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._active = False
+        self._progress = 0.0
+        self._downloaded_bytes = 0
+        self._total_bytes = 0
+        self._current_file = ""
+        self._error: str | None = None
+        self._done = False
+
+    # -- mutations (called from the download thread) ----------------------
+
+    def try_start(self) -> bool:
+        """Atomically set active if not already. Returns True on success."""
+        with self._lock:
+            if self._active:
+                return False
+            self._active = True
+            self._progress = 0.0
+            self._downloaded_bytes = 0
+            self._total_bytes = 0
+            self._current_file = ""
+            self._error = None
+            self._done = False
+            return True
+
+    def update(
+        self,
+        downloaded_bytes: int,
+        total_bytes: int,
+        current_file: str = "",
+    ) -> None:
+        with self._lock:
+            self._downloaded_bytes = downloaded_bytes
+            self._total_bytes = total_bytes
+            if total_bytes > 0:
+                self._progress = round((downloaded_bytes / total_bytes) * 100, 1)
+            if current_file:
+                self._current_file = current_file
+
+    def finish(self) -> None:
+        with self._lock:
+            self._progress = 100.0
+            self._done = True
+            self._active = False
+
+    def fail(self, error: str) -> None:
+        with self._lock:
+            self._error = error
+            self._active = False
+
+    # -- reads (called from async SSE handlers) ---------------------------
+
+    def snapshot(self) -> dict:
+        """Return a consistent, point-in-time copy of the state."""
+        with self._lock:
+            return {
+                "active": self._active,
+                "progress": self._progress,
+                "downloaded_bytes": self._downloaded_bytes,
+                "total_bytes": self._total_bytes,
+                "current_file": self._current_file,
+                "error": self._error,
+                "done": self._done,
+            }
+
+    @property
+    def is_active(self) -> bool:
+        with self._lock:
+            return self._active
+
+
+_llm_tracker = DownloadTracker()
+_whisper_tracker = DownloadTracker()
 
 # ---------------------------------------------------------------------------
 # Lightweight cache for GET /setup/check-models
@@ -115,25 +179,9 @@ def _atomic_download(url: str, dest_path: Path) -> None:
     """
     Stream download with progress tracking.
     Writes to .part file then renames atomically.
-    Updates _download_state so the SSE endpoint can push progress.
-    Guarded by _download_lock to prevent concurrent downloads.
+    Progress is published via ``_llm_tracker`` for the SSE endpoint.
     """
-    global _download_state
-
-    if not _download_lock.acquire(blocking=False):
-        logger.warning("Download already in progress, skipping duplicate request")
-        return
-
     try:
-        _download_state = {
-            "active": True,
-            "progress": 0.0,
-            "downloaded_bytes": 0,
-            "total_bytes": 0,
-            "error": None,
-            "done": False,
-        }
-
         _ensure_parent_dir(dest_path)
         tmp_path = dest_path.with_suffix(dest_path.suffix + ".part")
 
@@ -147,7 +195,6 @@ def _atomic_download(url: str, dest_path: Path) -> None:
         with requests.get(url, headers=headers, stream=True, timeout=(10, 180)) as r:
             r.raise_for_status()
             total = int(r.headers.get("Content-Length", 0))
-            _download_state["total_bytes"] = total
             downloaded = 0
             chunk_size = 256 * 1024
 
@@ -156,24 +203,17 @@ def _atomic_download(url: str, dest_path: Path) -> None:
                     if chunk:
                         f.write(chunk)
                         downloaded += len(chunk)
-                        _download_state["downloaded_bytes"] = downloaded
-                        if total > 0:
-                            _download_state["progress"] = round(
-                                (downloaded / total) * 100, 1
-                            )
+                        _llm_tracker.update(downloaded, total)
                 f.flush()
 
         tmp_path.replace(dest_path)
-        _download_state["progress"] = 100.0
-        _download_state["done"] = True
-        _download_state["active"] = False
+        _llm_tracker.finish()
         _check_models_cache["ts"] = 0.0
         logger.info("Model download complete: %s", dest_path)
 
     except Exception as exc:
         logger.exception("Model download failed")
-        _download_state["error"] = str(exc)
-        _download_state["active"] = False
+        _llm_tracker.fail(str(exc))
         try:
             tmp_path = dest_path.with_suffix(dest_path.suffix + ".part")
             if tmp_path.exists():
@@ -181,8 +221,6 @@ def _atomic_download(url: str, dest_path: Path) -> None:
         except Exception:
             logger.warning("Failed to remove partial file: %s", tmp_path)
         raise
-    finally:
-        _download_lock.release()
 
 
 # ---------------------------------------------------------------------------
@@ -192,26 +230,12 @@ def _atomic_download(url: str, dest_path: Path) -> None:
 def _download_whisper_files() -> None:
     """
     Download all Whisper model files into the whisper-small directory.
-    Tracks cumulative progress across all files.
-    Guarded by _whisper_download_lock.
+    Tracks cumulative progress across all files via ``_whisper_tracker``.
     """
-    global _whisper_download_state
-
-    if not _whisper_download_lock.acquire(blocking=False):
-        logger.warning("Whisper download already in progress, skipping")
-        return
-
     try:
-        total_expected = sum(f["size_mb"] for f in WHISPER_MODEL_FILES) * 1024 * 1024
-        _whisper_download_state = {
-            "active": True,
-            "progress": 0.0,
-            "downloaded_bytes": 0,
-            "total_bytes": int(total_expected),
-            "current_file": "",
-            "error": None,
-            "done": False,
-        }
+        total_expected = int(
+            sum(f["size_mb"] for f in WHISPER_MODEL_FILES) * 1024 * 1024
+        )
 
         dest_dir = Path(WHISPER_MODEL_PATH)
         dest_dir.mkdir(parents=True, exist_ok=True)
@@ -222,14 +246,13 @@ def _download_whisper_files() -> None:
             headers["Authorization"] = f"Bearer {hf_token}"
 
         cumulative = 0
-        remaining_estimate = int(total_expected)
+        remaining_estimate = total_expected
 
         for file_info in WHISPER_MODEL_FILES:
             fname = file_info["name"]
             url = file_info["url"]
             dest_file = dest_dir / fname
             tmp_file = dest_file.with_suffix(dest_file.suffix + ".part")
-            _whisper_download_state["current_file"] = fname
             file_estimate = int(file_info["size_mb"] * 1024 * 1024)
 
             logger.info("Downloading Whisper file: %s", fname)
@@ -239,11 +262,10 @@ def _download_whisper_files() -> None:
                 file_total = int(r.headers.get("Content-Length", 0))
                 if file_total:
                     remaining_estimate -= file_estimate
-                    _whisper_download_state["total_bytes"] = (
-                        cumulative + file_total + remaining_estimate
-                    )
+                    adjusted_total = cumulative + file_total + remaining_estimate
                 else:
                     remaining_estimate -= file_estimate
+                    adjusted_total = total_expected
 
                 chunk_size = 256 * 1024
                 with open(tmp_file, "wb") as f:
@@ -251,30 +273,22 @@ def _download_whisper_files() -> None:
                         if chunk:
                             f.write(chunk)
                             cumulative += len(chunk)
-                            _whisper_download_state["downloaded_bytes"] = cumulative
-                            actual_total = _whisper_download_state["total_bytes"]
-                            if actual_total > 0:
-                                _whisper_download_state["progress"] = round(
-                                    (cumulative / actual_total) * 100, 1
-                                )
+                            _whisper_tracker.update(
+                                cumulative, adjusted_total, fname
+                            )
                     f.flush()
 
             tmp_file.replace(dest_file)
             logger.info("Whisper file complete: %s", fname)
 
-        _whisper_download_state["progress"] = 100.0
-        _whisper_download_state["done"] = True
-        _whisper_download_state["active"] = False
+        _whisper_tracker.finish()
         _check_models_cache["ts"] = 0.0
         logger.info("Whisper model download complete: %s", dest_dir)
 
     except Exception as exc:
         logger.exception("Whisper model download failed")
-        _whisper_download_state["error"] = str(exc)
-        _whisper_download_state["active"] = False
+        _whisper_tracker.fail(str(exc))
         raise
-    finally:
-        _whisper_download_lock.release()
 
 
 # ---------------------------------------------------------------------------
@@ -344,7 +358,7 @@ async def check_models():
 
 @router.post("/download-model", dependencies=[Depends(verify_api_key)])
 async def download_model(background_tasks: BackgroundTasks):
-    if _download_state["active"]:
+    if _llm_tracker.is_active:
         return {"status": "already_downloading"}
 
     profile = analyze_hardware()
@@ -354,6 +368,9 @@ async def download_model(background_tasks: BackgroundTasks):
 
     if _is_model_valid(model_path, expected_size):
         return {"status": "already_exists"}
+
+    if not _llm_tracker.try_start():
+        return {"status": "already_downloading"}
 
     if model_path.exists():
         logger.info("Removing incomplete model file before re-download: %s", model_path)
@@ -370,19 +387,19 @@ async def download_progress():
 
     async def event_stream():
         while True:
-            state = _download_state.copy()
+            snap = _llm_tracker.snapshot()
 
-            if state.get("error"):
-                yield f"data: {json.dumps({'error': state['error']})}\n\n"
+            if snap["error"]:
+                yield f"data: {json.dumps({'error': snap['error']})}\n\n"
                 return
 
             payload = {
-                "progress": state["progress"],
-                "downloaded_bytes": state["downloaded_bytes"],
-                "total_bytes": state["total_bytes"],
+                "progress": snap["progress"],
+                "downloaded_bytes": snap["downloaded_bytes"],
+                "total_bytes": snap["total_bytes"],
             }
 
-            if state.get("done"):
+            if snap["done"]:
                 payload["done"] = True
                 yield f"data: {json.dumps(payload)}\n\n"
                 return
@@ -404,11 +421,14 @@ async def download_progress():
 @router.post("/download-whisper", dependencies=[Depends(verify_api_key)])
 async def download_whisper(background_tasks: BackgroundTasks):
     """Start downloading the Whisper model files in the background."""
-    if _whisper_download_state["active"]:
+    if _whisper_tracker.is_active:
         return {"status": "already_downloading"}
 
     if _is_whisper_valid():
         return {"status": "already_exists"}
+
+    if not _whisper_tracker.try_start():
+        return {"status": "already_downloading"}
 
     background_tasks.add_task(_download_whisper_files)
     return {"status": "started"}
@@ -420,20 +440,20 @@ async def whisper_download_progress():
 
     async def event_stream():
         while True:
-            state = _whisper_download_state.copy()
+            snap = _whisper_tracker.snapshot()
 
-            if state.get("error"):
-                yield f"data: {json.dumps({'error': state['error']})}\n\n"
+            if snap["error"]:
+                yield f"data: {json.dumps({'error': snap['error']})}\n\n"
                 return
 
             payload = {
-                "progress": state["progress"],
-                "downloaded_bytes": state["downloaded_bytes"],
-                "total_bytes": state["total_bytes"],
-                "current_file": state.get("current_file", ""),
+                "progress": snap["progress"],
+                "downloaded_bytes": snap["downloaded_bytes"],
+                "total_bytes": snap["total_bytes"],
+                "current_file": snap["current_file"],
             }
 
-            if state.get("done"):
+            if snap["done"]:
                 payload["done"] = True
                 yield f"data: {json.dumps(payload)}\n\n"
                 return
