@@ -191,6 +191,22 @@ export const translations = {
     viewFullNote: "View full note",
     closeNote: "Close",
     consultationSaved: "Saved to history",
+
+    // Confirmation dialogs
+    cancel: "Cancel",
+    confirmDiscardTitle: "Discard recording?",
+    confirmDiscardMessage: "This audio recording will be permanently deleted. This action cannot be undone.",
+    confirmDiscardAction: "Discard",
+    confirmClearTitle: "Clear all results?",
+    confirmClearMessage: "The current transcription and generated document will be lost. Saved consultations in history are not affected.",
+    confirmClearAction: "Clear all",
+    confirmOverwriteTitle: "Overwrite current document?",
+    confirmOverwriteMessage: "Processing a new file will replace the current transcription and document. Make sure you've exported or copied anything you need.",
+    confirmOverwriteAction: "Continue",
+
+    // Document restore
+    restoreOriginal: "Restore original",
+    documentRestored: "Original document restored",
   },
 
   fr: {
@@ -383,6 +399,22 @@ export const translations = {
     viewFullNote: "Voir la note",
     closeNote: "Fermer",
     consultationSaved: "Sauvegarde dans l'historique",
+
+    // Confirmation dialogs
+    cancel: "Annuler",
+    confirmDiscardTitle: "Supprimer l'enregistrement ?",
+    confirmDiscardMessage: "Cet enregistrement audio sera definitivement supprime. Cette action est irreversible.",
+    confirmDiscardAction: "Supprimer",
+    confirmClearTitle: "Effacer tous les resultats ?",
+    confirmClearMessage: "La transcription et le document genere seront perdus. Les consultations sauvegardees dans l'historique ne sont pas affectees.",
+    confirmClearAction: "Tout effacer",
+    confirmOverwriteTitle: "Remplacer le document actuel ?",
+    confirmOverwriteMessage: "Le traitement d'un nouveau fichier remplacera la transcription et le document actuels. Assurez-vous d'avoir exporte ou copie ce dont vous avez besoin.",
+    confirmOverwriteAction: "Continuer",
+
+    // Document restore
+    restoreOriginal: "Restaurer l'original",
+    documentRestored: "Document original restaure",
   },
 } as const;
 

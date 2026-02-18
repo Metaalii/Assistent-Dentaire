@@ -624,3 +624,91 @@ export const IconButton: React.FC<IconButtonProps> = ({
     </button>
   );
 };
+
+// ============================================
+// CONFIRM DIALOG COMPONENT
+// Modal overlay for destructive action confirmation
+// ============================================
+interface ConfirmDialogProps {
+  open: boolean;
+  title: string;
+  message: string;
+  confirmLabel: string;
+  cancelLabel: string;
+  variant?: "danger" | "warning";
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+
+export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
+  open,
+  title,
+  message,
+  confirmLabel,
+  cancelLabel,
+  variant = "danger",
+  onConfirm,
+  onCancel,
+}) => {
+  if (!open) return null;
+
+  const confirmStyles =
+    variant === "danger"
+      ? "text-white bg-gradient-to-br from-[#ef4444] to-[#dc2626] hover:from-[#dc2626] hover:to-[#b91c1c] shadow-[0_4px_14px_rgba(239,68,68,0.25)]"
+      : "text-white bg-gradient-to-br from-[#f59e0b] to-[#d97706] hover:from-[#d97706] hover:to-[#b45309] shadow-[0_4px_14px_rgba(245,158,11,0.25)]";
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+      onClick={onCancel}
+    >
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+
+      {/* Dialog */}
+      <div
+        className="
+          relative w-full max-w-sm
+          bg-white dark:bg-[#1e293b]
+          border border-[#e2e8f0] dark:border-[#334155]
+          rounded-2xl shadow-2xl
+          animate-fade-in-scale
+        "
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="p-6">
+          <h3 className="text-lg font-semibold text-[#1e293b] dark:text-white">
+            {title}
+          </h3>
+          <p className="mt-2 text-sm text-[#64748b] dark:text-[#94a3b8] leading-relaxed">
+            {message}
+          </p>
+        </div>
+        <div className="flex gap-3 px-6 pb-6">
+          <button
+            onClick={onCancel}
+            className="
+              flex-1 px-4 py-2.5 text-sm font-semibold rounded-xl
+              text-[#475569] dark:text-[#94a3b8]
+              bg-[#f1f5f9] dark:bg-[#334155]
+              hover:bg-[#e2e8f0] dark:hover:bg-[#475569]
+              transition-colors
+            "
+          >
+            {cancelLabel}
+          </button>
+          <button
+            onClick={onConfirm}
+            className={`
+              flex-1 px-4 py-2.5 text-sm font-semibold rounded-xl
+              transition-all duration-200
+              ${confirmStyles}
+            `}
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};

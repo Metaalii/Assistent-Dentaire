@@ -11,6 +11,7 @@ import {
   Badge,
   Skeleton,
   Container,
+  ConfirmDialog,
 } from "./ui";
 import {
   ToothIcon,
@@ -293,6 +294,7 @@ const LiveRecorder: React.FC<LiveRecorderProps> = ({ onRecordingComplete, isProc
   const [duration, setDuration] = useState(0);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -554,7 +556,7 @@ const LiveRecorder: React.FC<LiveRecorderProps> = ({ onRecordingComplete, isProc
                 </Button>
                 <Button
                   variant="ghost"
-                  onClick={discardRecording}
+                  onClick={() => setShowDiscardConfirm(true)}
                   leftIcon={<XIcon size={18} />}
                 >
                   {t("discardRecording")}
@@ -578,6 +580,20 @@ const LiveRecorder: React.FC<LiveRecorderProps> = ({ onRecordingComplete, isProc
           {t("localProcessing")}
         </p>
       </div>
+
+      {/* Discard confirmation dialog */}
+      <ConfirmDialog
+        open={showDiscardConfirm}
+        title={String(t("confirmDiscardTitle"))}
+        message={String(t("confirmDiscardMessage"))}
+        confirmLabel={String(t("confirmDiscardAction"))}
+        cancelLabel={String(t("cancel"))}
+        onConfirm={() => {
+          setShowDiscardConfirm(false);
+          discardRecording();
+        }}
+        onCancel={() => setShowDiscardConfirm(false)}
+      />
     </Card>
   );
 };
@@ -705,15 +721,19 @@ export default function MainDashboard({ onViewHistory }: MainDashboardProps) {
   const [error, setError] = useState<string | null>(null);
   const [transcript, setTranscript] = useState<string | null>(null);
   const [document, setDocument] = useState<string | null>(null);
+  const [originalDocument, setOriginalDocument] = useState<string | null>(null);
   const [streamingContent, setStreamingContent] = useState<string>("");
   const [isDragActive, setIsDragActive] = useState(false);
   const [isRagEnhanced, setIsRagEnhanced] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [showOverwriteConfirm, setShowOverwriteConfirm] = useState(false);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
 
   const { profile, getDocumentHeader, getDocumentFooter } = useProfile();
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  const processFile = useCallback(async (file: File) => {
+  const processFileDirectly = useCallback(async (file: File) => {
     const ext = getExt(file.name);
     if (!ALLOWED_EXTS.has(ext)) {
       setError("Please upload a valid audio file (WAV, MP3, M4A, OGG).");
@@ -756,6 +776,7 @@ ${fullText}
 
 ${getDocumentFooter(language)}`;
           setDocument(fullDocument);
+          setOriginalDocument(fullDocument);
           setIsStreaming(false);
           setStreamingContent("");
 
@@ -789,6 +810,22 @@ ${getDocumentFooter(language)}`;
       setIsStreaming(false);
     }
   }, [getDocumentHeader, getDocumentFooter, profile, language]);
+
+  // Gate file processing: confirm before overwriting existing document
+  const handleFileIntent = useCallback((file: File) => {
+    const ext = getExt(file.name);
+    if (!ALLOWED_EXTS.has(ext)) {
+      setError("Please upload a valid audio file (WAV, MP3, M4A, OGG).");
+      return;
+    }
+
+    if (document || transcript) {
+      setPendingFile(file);
+      setShowOverwriteConfirm(true);
+    } else {
+      processFileDirectly(file);
+    }
+  }, [document, transcript, processFileDirectly]);
 
   const handleExportPDF = useCallback(() => {
     if (!document) return;
@@ -1051,8 +1088,8 @@ ${getDocumentFooter(language)}`;
     evt.preventDefault();
     setIsDragActive(false);
     const file = evt.dataTransfer.files?.[0];
-    if (file) void processFile(file);
-  }, [processFile]);
+    if (file) void handleFileIntent(file);
+  }, [handleFileIntent]);
 
   const onDragOver = useCallback((evt: React.DragEvent<HTMLDivElement>) => {
     evt.preventDefault();
@@ -1064,19 +1101,35 @@ ${getDocumentFooter(language)}`;
     setIsDragActive(false);
   }, []);
 
-  const clearAll = useCallback(() => {
+  const doClearAll = useCallback(() => {
     setFileName(null);
     setError(null);
     setTranscript(null);
     setDocument(null);
+    setOriginalDocument(null);
   }, []);
+
+  // Gate clearAll: confirm when there's a document to lose
+  const handleClearIntent = useCallback(() => {
+    if (document || transcript) {
+      setShowClearConfirm(true);
+    } else {
+      doClearAll();
+    }
+  }, [document, transcript, doClearAll]);
+
+  const restoreOriginalDocument = useCallback(() => {
+    if (originalDocument) {
+      setDocument(originalDocument);
+    }
+  }, [originalDocument]);
 
   const hasContent = !!(transcript || document || error || isStreaming);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#f8fafc] via-[#f0f7fc] to-[#f8fafc] dark:from-[#0f172a] dark:via-[#1e293b] dark:to-[#0f172a]">
       {/* Header */}
-      <Header onClear={clearAll} hasContent={hasContent} onViewHistory={onViewHistory} />
+      <Header onClear={handleClearIntent} hasContent={hasContent} onViewHistory={onViewHistory} />
 
       {/* Main content */}
       <main className="py-8">
@@ -1085,7 +1138,7 @@ ${getDocumentFooter(language)}`;
             {/* Upload and Record section */}
             <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <UploadZone
-                onFileSelect={processFile}
+                onFileSelect={handleFileIntent}
                 fileName={fileName}
                 isLoading={isLoading}
                 isDragActive={isDragActive}
@@ -1095,7 +1148,7 @@ ${getDocumentFooter(language)}`;
                 inputRef={inputRef}
               />
               <LiveRecorder
-                onRecordingComplete={processFile}
+                onRecordingComplete={handleFileIntent}
                 isProcessing={isLoading}
               />
             </section>
@@ -1208,6 +1261,14 @@ ${getDocumentFooter(language)}`;
                   >
                     {t("copyDocument")}
                   </Button>
+                  {originalDocument && document !== originalDocument && (
+                    <Button
+                      variant="ghost"
+                      onClick={restoreOriginalDocument}
+                    >
+                      {t("restoreOriginal")}
+                    </Button>
+                  )}
                   <Button
                     variant="ghost"
                     onClick={() => inputRef.current?.click()}
@@ -1268,6 +1329,41 @@ ${getDocumentFooter(language)}`;
           </div>
         </Container>
       </footer>
+
+      {/* Clear all confirmation dialog */}
+      <ConfirmDialog
+        open={showClearConfirm}
+        title={String(t("confirmClearTitle"))}
+        message={String(t("confirmClearMessage"))}
+        confirmLabel={String(t("confirmClearAction"))}
+        cancelLabel={String(t("cancel"))}
+        onConfirm={() => {
+          setShowClearConfirm(false);
+          doClearAll();
+        }}
+        onCancel={() => setShowClearConfirm(false)}
+      />
+
+      {/* Overwrite confirmation dialog */}
+      <ConfirmDialog
+        open={showOverwriteConfirm}
+        title={String(t("confirmOverwriteTitle"))}
+        message={String(t("confirmOverwriteMessage"))}
+        confirmLabel={String(t("confirmOverwriteAction"))}
+        cancelLabel={String(t("cancel"))}
+        variant="warning"
+        onConfirm={() => {
+          setShowOverwriteConfirm(false);
+          if (pendingFile) {
+            processFileDirectly(pendingFile);
+            setPendingFile(null);
+          }
+        }}
+        onCancel={() => {
+          setShowOverwriteConfirm(false);
+          setPendingFile(null);
+        }}
+      />
     </div>
   );
 }
