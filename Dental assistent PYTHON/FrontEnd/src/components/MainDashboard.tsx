@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { summarizeTextStream, transcribeAudio } from "../api";
+import { AppError, getErrorGuidance } from "../errors";
 import { useProfile } from "../hooks/useProfile";
 import { useLanguage, useTheme } from "../i18n";
 import {
@@ -681,7 +682,7 @@ export default function MainDashboard() {
   const [fileName, setFileName] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ message: string; code?: string; hint?: string } | null>(null);
   const [transcript, setTranscript] = useState<string | null>(null);
   const [document, setDocument] = useState<string | null>(null);
   const [streamingContent, setStreamingContent] = useState<string>("");
@@ -690,10 +691,30 @@ export default function MainDashboard() {
   const { profile, getDocumentHeader, getDocumentFooter } = useProfile();
   const inputRef = useRef<HTMLInputElement | null>(null);
 
+  /** Build a structured error object from any caught error. */
+  const toErrorState = useCallback(
+    (e: unknown): { message: string; code?: string; hint?: string } => {
+      if (e instanceof AppError) {
+        const guidance = getErrorGuidance(e.code, language);
+        return {
+          message: guidance.title,
+          code: e.code,
+          hint: guidance.hint,
+        };
+      }
+      if (e instanceof Error) {
+        return { message: e.message };
+      }
+      return { message: String(e) };
+    },
+    [language],
+  );
+
   const processFile = useCallback(async (file: File) => {
     const ext = getExt(file.name);
     if (!ALLOWED_EXTS.has(ext)) {
-      setError("Please upload a valid audio file (WAV, MP3, M4A, OGG).");
+      const guidance = getErrorGuidance("INPUT_003", language);
+      setError({ message: guidance.title, code: "INPUT_003", hint: guidance.hint });
       return;
     }
 
@@ -735,18 +756,18 @@ ${getDocumentFooter(language)}`;
         // onError: called on error
         (err) => {
           console.error(err);
-          setError(err.message);
+          setError(toErrorState(err));
           setIsStreaming(false);
           setStreamingContent("");
         }
       );
     } catch (e) {
       console.error(e);
-      setError(e instanceof Error ? e.message : "An error occurred. Please try again.");
+      setError(toErrorState(e));
       setIsLoading(false);
       setIsStreaming(false);
     }
-  }, [getDocumentHeader, getDocumentFooter]);
+  }, [getDocumentHeader, getDocumentFooter, language, toErrorState]);
 
   const handleExportPDF = useCallback(() => {
     if (!document) return;
@@ -1067,8 +1088,15 @@ ${getDocumentFooter(language)}`;
                   className="shadow-lg"
                 >
                   <div>
-                    <p className="font-semibold">{t("processingError")}</p>
-                    <p className="mt-1 text-sm opacity-90">{error}</p>
+                    <p className="font-semibold">
+                      {error.code && (
+                        <span className="font-mono text-xs opacity-70 mr-2">[{error.code}]</span>
+                      )}
+                      {error.message}
+                    </p>
+                    {error.hint && (
+                      <p className="mt-1 text-sm opacity-90">{error.hint}</p>
+                    )}
                   </div>
                 </Alert>
               </section>

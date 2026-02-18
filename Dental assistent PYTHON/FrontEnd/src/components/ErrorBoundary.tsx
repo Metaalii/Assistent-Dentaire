@@ -1,4 +1,5 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
+import { AppError } from '../errors';
 import { AlertCircleIcon, RefreshIcon } from './ui/Icons';
 import { Button } from './ui';
 
@@ -35,8 +36,15 @@ class ErrorBoundary extends Component<Props, State> {
   componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
     this.setState({ errorInfo });
 
-    // Log error to console in development
-    console.error('ErrorBoundary caught an error:', error, errorInfo);
+    // Log structured error info for debugging
+    if (error instanceof AppError) {
+      console.error(
+        `[ErrorBoundary] ${error.toDebugString()}`,
+        errorInfo,
+      );
+    } else {
+      console.error('ErrorBoundary caught an error:', error, errorInfo);
+    }
 
     // Call custom error handler if provided
     this.props.onError?.(error, errorInfo);
@@ -86,9 +94,18 @@ class ErrorBoundary extends Component<Props, State> {
                 <summary className="cursor-pointer text-sm text-[#94a3b8] hover:text-[#64748b]">
                   Details techniques
                 </summary>
-                <div className="mt-2 p-3 bg-red-50 rounded-lg border border-red-100 overflow-auto max-h-32">
-                  <code className="text-xs text-red-700 whitespace-pre-wrap break-all">
-                    {this.state.error.message}
+                <div className="mt-2 p-3 bg-red-50 dark:bg-red-950/50 rounded-lg border border-red-100 dark:border-red-900/50 overflow-auto max-h-40">
+                  {this.state.error instanceof AppError && (
+                    <p className="text-xs font-mono text-red-600 dark:text-red-400 mb-1">
+                      Code: {(this.state.error as AppError).code}
+                      {(this.state.error as AppError).requestId &&
+                        ` | Request: ${(this.state.error as AppError).requestId}`}
+                    </p>
+                  )}
+                  <code className="text-xs text-red-700 dark:text-red-300 whitespace-pre-wrap break-all">
+                    {this.state.error instanceof AppError
+                      ? (this.state.error as AppError).toDebugString()
+                      : this.state.error.message}
                   </code>
                 </div>
               </details>

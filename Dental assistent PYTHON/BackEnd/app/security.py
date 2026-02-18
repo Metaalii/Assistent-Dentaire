@@ -1,7 +1,9 @@
 from fastapi.security.api_key import APIKeyHeader
-from fastapi import Security, HTTPException
+from fastapi import Security
 import os
 import logging
+
+from app.errors import AppError, AUTH_INVALID_KEY, AUTH_NOT_CONFIGURED
 
 logger = logging.getLogger("dental_assistant.security")
 
@@ -32,15 +34,14 @@ def validate_security_config():
     """
     if is_production_mode() and not check_api_key_configured():
         raise RuntimeError(
-            "SECURITY ERROR: API key must be configured in production mode. "
-            "Set APP_API_KEY environment variable."
+            f"[{AUTH_NOT_CONFIGURED.code}] {AUTH_NOT_CONFIGURED.message}"
         )
 
     if not check_api_key_configured():
         logger.warning(
-            "⚠️  Using default development API key. "
-            "This is insecure for production deployments. "
-            "Set APP_API_KEY environment variable for production."
+            "[%s] Using default development API key. "
+            "Set APP_API_KEY environment variable for production.",
+            AUTH_NOT_CONFIGURED.code,
         )
 
 
@@ -49,17 +50,13 @@ async def verify_api_key(api_key: str = Security(api_key_header)):
     Verify the API key from request headers.
 
     Raises:
-        HTTPException: 403 if invalid key
+        AppError: AUTH_INVALID_KEY if the key does not match.
     """
     expected = os.getenv("APP_API_KEY", DEFAULT_DEV_KEY)
 
-    # Invalid API key provided
     if api_key != expected:
-        logger.warning("Invalid API key attempt from request")
-        raise HTTPException(
-            status_code=403,
-            detail="Invalid API key"
-        )
+        logger.warning("[%s] Invalid API key attempt", AUTH_INVALID_KEY.code)
+        raise AppError(AUTH_INVALID_KEY)
 
     return api_key
 

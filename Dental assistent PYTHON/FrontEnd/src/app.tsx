@@ -30,11 +30,11 @@ async function waitForHealth(timeoutMs = 10_000): Promise<void> {
       const res = await fetch(`${API_URL}/health`);
       if (res.ok) return;
     } catch {
-      // ignore
+      // ignore transient network errors during startup
     }
     await sleep(250);
   }
-  throw new Error("Backend did not become ready");
+  throw new Error("[SYSTEM_001] Backend did not become ready. Is the server running on " + API_URL + "?");
 }
 
 // ============================================

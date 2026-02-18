@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { AppError, parseApiError, parseSSEError, type SSEErrorData } from "./errors";
 
 // Use environment variable for backend URL, fallback to default
 const BASE_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:9000";
@@ -62,7 +63,7 @@ export async function transcribeAudio(file: File, language?: string): Promise<Tr
     body: form,
   });
 
-  if (!res.ok) throw new Error(await safeError(res));
+  if (!res.ok) throw await parseApiError(res);
   return res.json();
 }
 
@@ -73,7 +74,7 @@ export async function summarizeText(text: string): Promise<SummarizeResponse> {
     body: JSON.stringify({ text }),
   });
 
-  if (!res.ok) throw new Error(await safeError(res));
+  if (!res.ok) throw await parseApiError(res);
   return res.json();
 }
 
@@ -84,13 +85,13 @@ export async function summarizeText(text: string): Promise<SummarizeResponse> {
  * @param text - The transcription text to summarize
  * @param onChunk - Callback called for each token received
  * @param onComplete - Callback called when generation is complete
- * @param onError - Callback called on error
+ * @param onError - Callback called on error (receives AppError with error code)
  */
 export async function summarizeTextStream(
   text: string,
   onChunk: (chunk: string) => void,
   onComplete: (fullText: string) => void,
-  onError?: (error: Error) => void
+  onError?: (error: AppError | Error) => void
 ): Promise<void> {
   const headers = await authHeaders({ "Content-Type": "application/json" });
 
@@ -102,7 +103,7 @@ export async function summarizeTextStream(
     });
 
     if (!res.ok) {
-      throw new Error(await safeError(res));
+      throw await parseApiError(res);
     }
 
     const reader = res.body?.getReader();
@@ -140,11 +141,12 @@ export async function summarizeTextStream(
             if (parsed.chunk) {
               fullText += parsed.chunk;
               onChunk(parsed.chunk);
-            } else if (parsed.error) {
-              throw new Error(parsed.error);
+            } else if (parsed.error_code || parsed.error) {
+              throw parseSSEError(parsed as SSEErrorData);
             }
           } catch (parseErr) {
-            // Skip invalid JSON lines (could be partial data)
+            // Re-throw AppErrors; skip JSON parse failures
+            if (parseErr instanceof AppError) throw parseErr;
             if (data.length > 0) {
               console.warn("Failed to parse SSE data:", data);
             }
@@ -175,7 +177,11 @@ export async function summarizeTextStream(
     // If we exit the loop without [DONE], still complete
     onComplete(fullText);
   } catch (err) {
-    const error = err instanceof Error ? err : new Error(String(err));
+    const error = err instanceof AppError
+      ? err
+      : err instanceof Error
+        ? err
+        : new Error(String(err));
     if (onError) {
       onError(error);
     } else {
@@ -188,7 +194,7 @@ export async function checkModelStatus(): Promise<HardwareInfo> {
   // Include auth headers for consistency (endpoint may require auth in future)
   const headers = await authHeaders();
   const res = await fetch(`${BASE_URL}/setup/check-models`, { headers });
-  if (!res.ok) throw new Error(await safeError(res));
+  if (!res.ok) throw await parseApiError(res);
   return res.json();
 }
 
@@ -198,6 +204,8 @@ export interface DownloadProgress {
   total_bytes: number;
   done?: boolean;
   error?: string;
+  error_code?: string;
+  message?: string;
 }
 
 /**
@@ -207,7 +215,7 @@ export interface DownloadProgress {
 export function subscribeDownloadProgress(
   onProgress: (p: DownloadProgress) => void,
   onDone: () => void,
-  onError: (err: string) => void,
+  onError: (err: string, code?: string) => void,
 ): () => void {
   const controller = new AbortController();
 
@@ -217,11 +225,11 @@ export function subscribeDownloadProgress(
         signal: controller.signal,
       });
       if (!res.ok) {
-        onError(`SSE connection failed: ${res.status}`);
+        onError(`SSE connection failed: ${res.status}`, "SYSTEM_004");
         return;
       }
       const reader = res.body?.getReader();
-      if (!reader) { onError("No response body"); return; }
+      if (!reader) { onError("No response body", "SYSTEM_004"); return; }
 
       const decoder = new TextDecoder();
       let buffer = "";
@@ -240,7 +248,13 @@ export function subscribeDownloadProgress(
           if (!raw) continue;
           try {
             const data: DownloadProgress = JSON.parse(raw);
-            if (data.error) { onError(data.error); return; }
+            if (data.error || data.error_code) {
+              onError(
+                data.error || data.message || "Download failed",
+                data.error_code || "DOWNLOAD_002",
+              );
+              return;
+            }
             onProgress(data);
             if (data.done) { onDone(); return; }
           } catch { /* skip malformed */ }
@@ -248,7 +262,7 @@ export function subscribeDownloadProgress(
       }
     } catch (err) {
       if (!controller.signal.aborted) {
-        onError(err instanceof Error ? err.message : String(err));
+        onError(err instanceof Error ? err.message : String(err), "SYSTEM_004");
       }
     }
   })();
@@ -262,7 +276,7 @@ export async function downloadModel(): Promise<{ status: string }> {
     headers: await authHeaders(),
   });
 
-  if (!res.ok) throw new Error(await safeError(res));
+  if (!res.ok) throw await parseApiError(res);
   return res.json();
 }
 
@@ -272,7 +286,7 @@ export async function downloadWhisper(): Promise<{ status: string }> {
     headers: await authHeaders(),
   });
 
-  if (!res.ok) throw new Error(await safeError(res));
+  if (!res.ok) throw await parseApiError(res);
   return res.json();
 }
 
@@ -287,7 +301,7 @@ export interface WhisperDownloadProgress extends DownloadProgress {
 export function subscribeWhisperProgress(
   onProgress: (p: WhisperDownloadProgress) => void,
   onDone: () => void,
-  onError: (err: string) => void,
+  onError: (err: string, code?: string) => void,
 ): () => void {
   const controller = new AbortController();
 
@@ -297,11 +311,11 @@ export function subscribeWhisperProgress(
         signal: controller.signal,
       });
       if (!res.ok) {
-        onError(`SSE connection failed: ${res.status}`);
+        onError(`SSE connection failed: ${res.status}`, "SYSTEM_004");
         return;
       }
       const reader = res.body?.getReader();
-      if (!reader) { onError("No response body"); return; }
+      if (!reader) { onError("No response body", "SYSTEM_004"); return; }
 
       const decoder = new TextDecoder();
       let buffer = "";
@@ -320,7 +334,13 @@ export function subscribeWhisperProgress(
           if (!raw) continue;
           try {
             const data: WhisperDownloadProgress = JSON.parse(raw);
-            if (data.error) { onError(data.error); return; }
+            if (data.error || data.error_code) {
+              onError(
+                data.error || data.message || "Whisper download failed",
+                data.error_code || "DOWNLOAD_002",
+              );
+              return;
+            }
             onProgress(data);
             if (data.done) { onDone(); return; }
           } catch { /* skip malformed */ }
@@ -328,19 +348,10 @@ export function subscribeWhisperProgress(
       }
     } catch (err) {
       if (!controller.signal.aborted) {
-        onError(err instanceof Error ? err.message : String(err));
+        onError(err instanceof Error ? err.message : String(err), "SYSTEM_004");
       }
     }
   })();
 
   return () => controller.abort();
-}
-
-async function safeError(res: Response): Promise<string> {
-  try {
-    const data = await res.json();
-    return data?.detail ?? res.statusText;
-  } catch {
-    return res.statusText;
-  }
 }

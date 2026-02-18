@@ -5,10 +5,18 @@ import uuid
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, UploadFile
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 
+from app.errors import (
+    AppError,
+    INPUT_MISSING_FILENAME,
+    INPUT_UNSUPPORTED_EXT,
+    INPUT_TOO_LARGE,
+    SYSTEM_CLIENT_DISCONNECTED,
+    INFERENCE_TRANSCRIPTION_FAILED,
+)
 from app.security import verify_api_key
 
 router = APIRouter()
@@ -35,13 +43,13 @@ def get_whisper():
 
 def _validate_upload(file: UploadFile) -> str:
     if not file.filename:
-        raise HTTPException(status_code=400, detail="Missing filename")
+        raise AppError(INPUT_MISSING_FILENAME)
 
     ext = Path(file.filename).suffix.lower()
     if ext not in ALLOWED_EXTENSIONS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unsupported extension. Allowed: {sorted(ALLOWED_EXTENSIONS)}",
+        raise AppError(
+            INPUT_UNSUPPORTED_EXT,
+            detail=f"Got '{ext}'. Allowed: {sorted(ALLOWED_EXTENSIONS)}",
         )
     return ext
 
@@ -49,7 +57,7 @@ def _validate_upload(file: UploadFile) -> str:
 def _copy_with_limit(src, dst, max_bytes: int) -> int:
     """
     Copy from src file-like object to dst file-like object with a hard cap.
-    Returns bytes written. Raises HTTPException(413) if exceeded.
+    Returns bytes written. Raises AppError(INPUT_TOO_LARGE) if exceeded.
     """
     written = 0
     chunk_size = 1024 * 1024  # 1MB
@@ -60,7 +68,10 @@ def _copy_with_limit(src, dst, max_bytes: int) -> int:
             break
         written += len(chunk)
         if written > max_bytes:
-            raise HTTPException(status_code=413, detail="Request entity too large")
+            raise AppError(
+                INPUT_TOO_LARGE,
+                detail=f"Upload exceeds {max_bytes // (1024*1024)} MB limit",
+            )
         dst.write(chunk)
 
     return written
@@ -83,7 +94,7 @@ async def transcribe_audio(
         file: Audio file upload
         language: Optional language hint ("fr", "en"). Defaults to "fr".
     """
-    request_id = uuid.uuid4().hex
+    request_id = uuid.uuid4().hex[:12]
     ext = _validate_upload(file)
 
     tmp_path: Optional[str] = None
@@ -99,7 +110,7 @@ async def transcribe_audio(
 
         # 2) If the client disconnected, don't waste time transcribing
         if await request.is_disconnected():
-            raise HTTPException(status_code=499, detail="Client closed request")
+            raise AppError(SYSTEM_CLIENT_DISCONNECTED, request_id=request_id)
 
         # 3) Transcribe with language hint
         whisper = get_whisper()
@@ -107,20 +118,20 @@ async def transcribe_audio(
 
         return {"text": text, "request_id": request_id}
 
-    except HTTPException:
-        # Keep clean HTTP errors as-is
+    except AppError:
         raise
 
     except Exception:
         logger.exception(
-            "Transcription failed [request_id=%s, filename=%s]",
+            "[%s] Transcription failed [request_id=%s, filename=%s]",
+            INFERENCE_TRANSCRIPTION_FAILED.code,
             request_id,
             getattr(file, "filename", "N/A"),
         )
-        # Don’t leak internal errors to UI; keep request_id for debugging
-        raise HTTPException(
-            status_code=500,
-            detail=f"Transcription failed (request_id={request_id})",
+        raise AppError(
+            INFERENCE_TRANSCRIPTION_FAILED,
+            request_id=request_id,
+            detail=f"filename={getattr(file, 'filename', 'N/A')}",
         )
 
     finally:
@@ -129,4 +140,7 @@ async def transcribe_audio(
             try:
                 os.remove(tmp_path)
             except Exception:
-                logger.warning("Failed to remove temp file %s [request_id=%s]", tmp_path, request_id)
+                logger.warning(
+                    "Failed to remove temp file %s [request_id=%s]",
+                    tmp_path, request_id,
+                )
