@@ -25,7 +25,7 @@ async function sleep(ms: number) {
 
 const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:9000";
 
-async function waitForHealth(timeoutMs = 10_000): Promise<void> {
+async function waitForHealth(timeoutMs = 2_000): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     try {
@@ -192,7 +192,7 @@ function AppContent() {
 
     (async () => {
       try {
-        await waitForHealth(12_000);
+        await waitForHealth(2_000);
         if (!cancelled) setBoot({ state: "setup" });
       } catch (e) {
         if (!cancelled)

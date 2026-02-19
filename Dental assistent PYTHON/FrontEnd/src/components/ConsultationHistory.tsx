@@ -1,14 +1,13 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { searchConsultations, getRAGStatus, type ConsultationResult, type RAGStatus } from "../api";
+import { searchConsultations, getRAGStatus, exportConsultations, type ConsultationResult, type RAGStatus } from "../api";
 import { useLanguage, useTheme } from "../i18n";
 import {
   Button,
   Card,
-  CardHeader,
   CardBody,
   Alert,
   Badge,
-  MedicalLoader,
+  Skeleton,
   Container,
 } from "./ui";
 import {
@@ -108,6 +107,28 @@ export default function ConsultationHistory({ onBack }: ConsultationHistoryProps
   const [error, setError] = useState<string | null>(null);
   const [ragStatus, setRagStatus] = useState<RAGStatus | null>(null);
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExport = useCallback(async () => {
+    setIsExporting(true);
+    try {
+      const data = await exportConsultations();
+      const blob = new Blob(
+        [JSON.stringify(data.consultations, null, 2)],
+        { type: "application/json" },
+      );
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `consultations-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Export failed");
+    } finally {
+      setIsExporting(false);
+    }
+  }, []);
 
   // Load RAG status and recent consultations on mount
   useEffect(() => {
@@ -205,6 +226,16 @@ export default function ConsultationHistory({ onBack }: ConsultationHistoryProps
                   </Badge>
                 </>
               )}
+              {ragStatus?.available && ragStatus.consultations_count > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleExport}
+                  disabled={isExporting}
+                >
+                  {isExporting ? t("exporting") : t("exportJSON")}
+                </Button>
+              )}
               <button
                 onClick={toggleTheme}
                 className="p-2 rounded-lg bg-[#f1f5f9] dark:bg-[#334155] text-[#64748b] dark:text-[#94a3b8] hover:bg-[#e2e8f0] dark:hover:bg-[#475569] transition-colors"
@@ -260,8 +291,25 @@ export default function ConsultationHistory({ onBack }: ConsultationHistoryProps
 
             {/* Loading */}
             {isSearching && (
-              <div className="flex justify-center py-12">
-                <MedicalLoader />
+              <div className="space-y-4">
+                {[0, 1, 2].map((i) => (
+                  <Card key={i}>
+                    <CardBody>
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 space-y-3">
+                          <div className="flex items-center gap-3">
+                            <Skeleton width={120} height={14} />
+                            <Skeleton width={80} height={22} variant="rectangular" />
+                          </div>
+                          <Skeleton width="100%" height={14} />
+                          <Skeleton width="95%" height={14} />
+                          <Skeleton width="75%" height={14} />
+                        </div>
+                        <Skeleton width={90} height={32} variant="rectangular" />
+                      </div>
+                    </CardBody>
+                  </Card>
+                ))}
               </div>
             )}
 

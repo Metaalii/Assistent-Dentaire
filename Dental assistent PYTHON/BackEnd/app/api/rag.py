@@ -4,6 +4,7 @@ RAG & consultation history endpoints.
 GET  /rag/status              — RAG system availability + document counts
 POST /consultations/save      — save a SmartNote to history
 POST /consultations/search    — semantic search across past notes
+GET  /consultations/export    — export all consultations as JSON
 POST /summarize-rag           — RAG-enhanced SmartNote (blocking)
 POST /summarize-stream-rag    — RAG-enhanced SmartNote (SSE streaming)
 """
@@ -13,7 +14,7 @@ import logging
 import threading
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from app.config import RAG_DATA_DIR, get_llm_model_path
@@ -61,11 +62,25 @@ def initialize_rag() -> None:
             result = pipeline.index_knowledge(seed_docs)
             logger.info("Seeded %s knowledge documents", result.get("documents_written", 0))
 
+        # Auto-rebuild: journal has records but ChromaDB is empty/corrupted
+        from app.rag.journal import count as journal_count
+
+        journal_n = journal_count()
+        chroma_n = stats.get("consultations_count", 0)
+        if journal_n > 0 and chroma_n == 0:
+            logger.warning(
+                "Journal has %d records but ChromaDB has 0 — rebuilding index",
+                journal_n,
+            )
+            rebuild = pipeline.rebuild_from_journal()
+            logger.info("Rebuild result: %s", rebuild)
+
         _rag_available = True
         logger.info(
-            "RAG system ready: %d knowledge docs, %d consultations",
+            "RAG system ready: %d knowledge docs, %d consultations, %d journal records",
             stats.get("knowledge_count", 0) or len(get_seed_knowledge()),
             stats.get("consultations_count", 0),
+            journal_n,
         )
     except ImportError:
         logger.info(
@@ -165,6 +180,25 @@ async def search_consultations(req: SearchRequest):
         min(req.top_k, 50),
     )
     return {"results": results, "count": len(results)}
+
+
+@router.get("/consultations/export", dependencies=[Depends(verify_api_key)])
+async def export_consultations():
+    """
+    Export every consultation from the durable JSONL journal.
+
+    Returns a JSON array of all records — suitable for user backup
+    or for rebuilding the vector index after data loss.
+    """
+    from app.rag.journal import read_all as journal_read_all
+
+    records = journal_read_all()
+    return JSONResponse(
+        content={"consultations": records, "count": len(records)},
+        headers={
+            "Content-Disposition": 'attachment; filename="consultations-export.json"',
+        },
+    )
 
 
 # ---------------------------------------------------------------------------
