@@ -1,1088 +1,90 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { summarizeTextStreamRAG, transcribeAudio, saveConsultation } from "../api";
+import React, { useCallback, useRef, useState } from "react";
+import { useSmartNoteStream } from "../hooks/useSmartNoteStream";
 import { useProfile } from "../hooks/useProfile";
-import { useLanguage, useTheme } from "../i18n";
+import { useLanguage } from "../i18n";
+import { exportPDF } from "../utils/exportPDF";
 import {
-  Button,
-  Card,
-  CardHeader,
-  CardBody,
   Alert,
-  Badge,
-  Skeleton,
   Container,
   ConfirmDialog,
 } from "./ui";
 import {
   ToothIcon,
-  MicrophoneIcon,
-  WaveformIcon,
-  DocumentIcon,
-  SparklesIcon,
-  UploadCloudIcon,
-  FileAudioIcon,
   XIcon,
-  HeartPulseIcon,
-  StopIcon,
-  DownloadIcon,
-  SunIcon,
-  MoonIcon,
 } from "./ui/Icons";
+import {
+  Header,
+  UploadZone,
+  LiveRecorder,
+  ProcessingIndicator,
+  SmartNoteEditor,
+  StreamingPreview,
+} from "./dashboard";
 
-const ALLOWED_EXTS = new Set(["wav", "mp3", "m4a", "ogg", "webm", "mp4"]);
-
-function getExt(name: string) {
-  const parts = name.split(".");
-  return parts.length > 1 ? parts[parts.length - 1].toLowerCase() : "";
-}
-
-// ============================================
-// HEADER COMPONENT (memoized)
-// ============================================
-const Header: React.FC<{ onClear: () => void; hasContent: boolean; onViewHistory?: () => void }> = React.memo(({
-  onClear,
-  hasContent,
-  onViewHistory,
-}) => {
-  const { t } = useLanguage();
-  const { resolvedTheme, toggleTheme } = useTheme();
-
-  return (
-    <header className="sticky top-0 z-50 bg-white/80 dark:bg-[#1e293b]/80 backdrop-blur-xl border-b border-[#e2e8f0] dark:border-[#334155] shadow-sm">
-      <Container>
-        <div className="flex items-center justify-between py-4">
-          {/* Logo and title */}
-          <div className="flex items-center gap-4">
-            <div className="relative">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#2d96c6] to-[#28b5ad] shadow-lg shadow-[#2d96c6]/30 flex items-center justify-center">
-                <ToothIcon className="text-white" size={24} />
-              </div>
-              <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-white dark:bg-[#1e293b] shadow-md flex items-center justify-center">
-                <HeartPulseIcon className="text-[#28b5ad]" size={12} />
-              </div>
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-[#1e293b] dark:text-white">{t("appName")}</h1>
-              <p className="text-sm text-[#64748b] dark:text-[#94a3b8]">{t("aiPoweredDocumentation")}</p>
-            </div>
-          </div>
-
-          {/* Actions */}
-          <div className="flex items-center gap-3">
-            <Badge variant="success">
-              <span className="w-2 h-2 rounded-full bg-[#10b981] animate-pulse" />
-              {t("online")}
-            </Badge>
-            {/* History button */}
-            {onViewHistory && (
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={onViewHistory}
-                leftIcon={<DocumentIcon size={16} />}
-              >
-                {t("viewHistory")}
-              </Button>
-            )}
-            {/* Theme toggle button */}
-            <button
-              onClick={toggleTheme}
-              className="p-2 rounded-lg bg-[#f1f5f9] dark:bg-[#334155] text-[#64748b] dark:text-[#94a3b8] hover:bg-[#e2e8f0] dark:hover:bg-[#475569] transition-colors"
-              title={resolvedTheme === "dark" ? String(t("lightMode")) : String(t("darkMode"))}
-            >
-              {resolvedTheme === "dark" ? <SunIcon size={18} /> : <MoonIcon size={18} />}
-            </button>
-            {hasContent && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onClear}
-                leftIcon={<XIcon size={16} />}
-              >
-                {t("clear")}
-              </Button>
-            )}
-          </div>
-        </div>
-      </Container>
-    </header>
-  );
-});
-
-Header.displayName = 'Header';
-
-// ============================================
-// UPLOAD ZONE COMPONENT (memoized)
-// ============================================
-interface UploadZoneProps {
-  onFileSelect: (file: File) => void;
-  fileName: string | null;
-  isLoading: boolean;
-  isDragActive: boolean;
-  onDragOver: (e: React.DragEvent<HTMLDivElement>) => void;
-  onDragLeave: (e: React.DragEvent<HTMLDivElement>) => void;
-  onDrop: (e: React.DragEvent<HTMLDivElement>) => void;
-  inputRef: React.RefObject<HTMLInputElement>;
-}
-
-const UploadZone: React.FC<UploadZoneProps> = React.memo(({
-  onFileSelect,
-  fileName,
-  isLoading,
-  isDragActive,
-  onDragOver,
-  onDragLeave,
-  onDrop,
-  inputRef,
-}) => {
-  const { t } = useLanguage();
-
-  return (
-    <Card
-      className={`
-        relative overflow-hidden transition-all duration-300
-        ${isDragActive ? "ring-4 ring-[#2d96c6]/30 border-[#2d96c6]" : ""}
-        ${isLoading ? "opacity-50 pointer-events-none" : ""}
-      `}
-      hover={!isLoading}
-    >
-      {/* Gradient background pattern */}
-      <div className="absolute inset-0 bg-gradient-to-br from-[#f0f7fc]/50 via-white to-[#effcfb]/50 dark:from-[#1e293b]/50 dark:via-[#1e293b] dark:to-[#1e293b]/50 pointer-events-none" />
-
-      {/* Decorative circles */}
-      <div className="absolute -top-20 -right-20 w-40 h-40 bg-gradient-to-br from-[#2d96c6]/10 to-transparent rounded-full blur-2xl pointer-events-none" />
-      <div className="absolute -bottom-20 -left-20 w-40 h-40 bg-gradient-to-tr from-[#28b5ad]/10 to-transparent rounded-full blur-2xl pointer-events-none" />
-
-      <CardBody className="relative">
-        <div
-          className="flex flex-col items-center justify-center py-12 cursor-pointer"
-          onClick={() => inputRef.current?.click()}
-          onDrop={onDrop}
-          onDragOver={onDragOver}
-          onDragLeave={onDragLeave}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") inputRef.current?.click();
-          }}
-        >
-          {/* Upload icon */}
-          <div
-            className={`
-              w-20 h-20 rounded-2xl flex items-center justify-center mb-6
-              transition-all duration-300
-              ${
-                isDragActive
-                  ? "bg-gradient-to-br from-[#2d96c6] to-[#28b5ad] scale-110"
-                  : "bg-gradient-to-br from-[#f0f7fc] to-[#effcfb]"
-              }
-            `}
-          >
-            <UploadCloudIcon
-              className={isDragActive ? "text-white" : "text-[#2d96c6]"}
-              size={40}
-            />
-          </div>
-
-          {/* Title */}
-          <h3 className="text-xl font-semibold text-[#1e293b] dark:text-white mb-2">
-            {isDragActive ? t("dropAudioHere") : t("uploadAudioRecording")}
-          </h3>
-
-          {/* Description */}
-          <p className="text-[#64748b] dark:text-[#94a3b8] mb-6 text-center max-w-md">
-            {t("dragAndDropAudio")}
-          </p>
-
-          {/* File type badges */}
-          <div className="flex flex-wrap justify-center gap-2 mb-6">
-            {["WAV", "MP3", "M4A", "OGG", "WEBM", "MP4"].map((ext) => (
-              <Badge key={ext} variant="neutral">
-                <FileAudioIcon size={12} />
-                {ext}
-              </Badge>
-            ))}
-          </div>
-
-          {/* Upload button */}
-          <Button
-            variant="primary"
-            leftIcon={<MicrophoneIcon size={18} />}
-            disabled={isLoading}
-          >
-            {t("chooseAudioFile")}
-          </Button>
-
-          {/* Selected file info */}
-          {fileName && (
-            <div className="mt-4 flex items-center gap-2 px-4 py-2 bg-[#f0fdf4] dark:bg-[#14332a] rounded-lg border border-[#bbf7d0] dark:border-[#276749]">
-              <FileAudioIcon className="text-[#10b981]" size={16} />
-              <span className="text-sm font-medium text-[#166534] dark:text-[#6ee7b7]">{fileName}</span>
-            </div>
-          )}
-
-          {/* Hidden input */}
-          <input
-            ref={inputRef}
-            type="file"
-            accept=".wav,.mp3,.m4a,.ogg,.webm,.mp4"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) {
-                onFileSelect(file);
-                e.target.value = "";
-              }
-            }}
-          />
-        </div>
-      </CardBody>
-
-      {/* Max size info */}
-      <div className="px-6 py-3 bg-[#f8fafc] dark:bg-[#0f172a] border-t border-[#e2e8f0] dark:border-[#334155] text-center">
-        <p className="text-xs text-[#94a3b8]">
-          {t("maxFileSize")}
-        </p>
-      </div>
-    </Card>
-  );
-});
-
-UploadZone.displayName = 'UploadZone';
-
-// ============================================
-// WAVEFORM VISUALIZER COMPONENT (memoized to prevent re-renders)
-// ============================================
-const WaveformVisualizer: React.FC = React.memo(() => {
-  // Generate heights once and memoize them
-  const barHeights = useMemo(
-    () => Array.from({ length: 12 }, () => Math.random() * 24 + 8),
-    []
-  );
-
-  return (
-    <div className="flex items-center justify-center gap-1 mb-6 h-8">
-      {barHeights.map((height, i) => (
-        <div
-          key={i}
-          className="w-1 bg-[#2d96c6] rounded-full animate-pulse"
-          style={{
-            height: `${height}px`,
-            animationDelay: `${i * 0.1}s`,
-            animationDuration: '0.5s'
-          }}
-        />
-      ))}
-    </div>
-  );
-});
-
-WaveformVisualizer.displayName = 'WaveformVisualizer';
-
-// ============================================
-// LIVE RECORDER COMPONENT
-// ============================================
-interface LiveRecorderProps {
-  onRecordingComplete: (file: File) => void;
-  isProcessing: boolean;
-}
-
-const LiveRecorder: React.FC<LiveRecorderProps> = ({ onRecordingComplete, isProcessing }) => {
-  const { t } = useLanguage();
-  const [isRecording, setIsRecording] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
-  const [duration, setDuration] = useState(0);
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
-
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const timerRef = useRef<number | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const audioUrlRef = useRef<string | null>(null);
-
-  // Keep ref in sync with state for cleanup
-  useEffect(() => {
-    audioUrlRef.current = audioUrl;
-  }, [audioUrl]);
-
-  // Cleanup on unmount only (empty deps)
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop());
-      }
-      if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
-    };
-  }, []);
-
-  const formatDuration = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  const startRecording = async () => {
-    try {
-      setError(null);
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
-
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4'
-      });
-      mediaRecorderRef.current = mediaRecorder;
-      chunksRef.current = [];
-
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          chunksRef.current.push(e.data);
-        }
-      };
-
-      mediaRecorder.onstop = () => {
-        const mimeType = mediaRecorder.mimeType;
-        const blob = new Blob(chunksRef.current, { type: mimeType });
-        const url = URL.createObjectURL(blob);
-        setAudioUrl(url);
-
-        // Stop all tracks
-        if (streamRef.current) {
-          streamRef.current.getTracks().forEach(track => track.stop());
-        }
-      };
-
-      mediaRecorder.start(1000); // Collect data every second
-      setIsRecording(true);
-      setIsPaused(false);
-      setDuration(0);
-
-      timerRef.current = window.setInterval(() => {
-        setDuration(d => d + 1);
-      }, 1000);
-
-    } catch (err) {
-      console.error('Error accessing microphone:', err);
-      setError(String(t("microphoneError")));
-    }
-  };
-
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-      setIsPaused(false);
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
-    }
-  };
-
-  const pauseRecording = () => {
-    if (mediaRecorderRef.current && isRecording && !isPaused) {
-      mediaRecorderRef.current.pause();
-      setIsPaused(true);
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
-    }
-  };
-
-  const resumeRecording = () => {
-    if (mediaRecorderRef.current && isRecording && isPaused) {
-      mediaRecorderRef.current.resume();
-      setIsPaused(false);
-      timerRef.current = window.setInterval(() => {
-        setDuration(d => d + 1);
-      }, 1000);
-    }
-  };
-
-  const discardRecording = () => {
-    if (audioUrl) {
-      URL.revokeObjectURL(audioUrl);
-      setAudioUrl(null);
-    }
-    setDuration(0);
-    chunksRef.current = [];
-  };
-
-  const sendRecording = () => {
-    if (chunksRef.current.length > 0) {
-      const mimeType = mediaRecorderRef.current?.mimeType || 'audio/webm';
-      const ext = mimeType.includes('webm') ? 'webm' : 'mp4';
-      const blob = new Blob(chunksRef.current, { type: mimeType });
-      const file = new File([blob], `recording-${Date.now()}.${ext}`, { type: mimeType });
-      onRecordingComplete(file);
-      discardRecording();
-    }
-  };
-
-  return (
-    <Card
-      className={`relative overflow-hidden transition-all duration-300 ${isProcessing ? "opacity-50 pointer-events-none" : ""}`}
-      hover={!isProcessing}
-    >
-      {/* Gradient background */}
-      <div className="absolute inset-0 bg-gradient-to-br from-[#f0f7fc]/50 via-white to-[#effcfb]/50 dark:from-[#1e293b]/50 dark:via-[#1e293b] dark:to-[#1e293b]/50 pointer-events-none" />
-
-      {/* Decorative circles */}
-      <div className="absolute -top-20 -left-20 w-40 h-40 bg-gradient-to-br from-[#2d96c6]/10 to-transparent rounded-full blur-2xl pointer-events-none" />
-      <div className="absolute -bottom-20 -right-20 w-40 h-40 bg-gradient-to-tr from-[#28b5ad]/10 to-transparent rounded-full blur-2xl pointer-events-none" />
-
-      <CardBody className="relative">
-        <div className="flex flex-col items-center justify-center py-8">
-          {/* Recording indicator */}
-          <div
-            className={`
-              w-20 h-20 rounded-full flex items-center justify-center mb-6
-              transition-all duration-300
-              ${isRecording
-                ? isPaused
-                  ? "bg-gradient-to-br from-[#f59e0b] to-[#d97706] animate-pulse"
-                  : "bg-gradient-to-br from-[#ef4444] to-[#dc2626] animate-pulse"
-                : audioUrl
-                  ? "bg-gradient-to-br from-[#10b981] to-[#059669]"
-                  : "bg-gradient-to-br from-[#2d96c6] to-[#28b5ad]"
-              }
-            `}
-          >
-            {isRecording ? (
-              <WaveformIcon className="text-white" size={40} />
-            ) : audioUrl ? (
-              <FileAudioIcon className="text-white" size={40} />
-            ) : (
-              <MicrophoneIcon className="text-white" size={40} />
-            )}
-          </div>
-
-          {/* Title */}
-          <h3 className="text-xl font-semibold text-[#1e293b] dark:text-white mb-2">
-            {isRecording
-              ? isPaused ? t("recordingPaused") : t("recordingInProgress")
-              : audioUrl
-                ? t("recordingReady")
-                : t("liveRecording")
-            }
-          </h3>
-
-          {/* Duration display */}
-          {(isRecording || audioUrl) && (
-            <div className="text-3xl font-mono font-bold text-[#1e293b] dark:text-white mb-4">
-              {formatDuration(duration)}
-            </div>
-          )}
-
-          {/* Description */}
-          {!isRecording && !audioUrl && (
-            <p className="text-[#64748b] dark:text-[#94a3b8] mb-6 text-center max-w-md">
-              {t("recordFromMicrophone")}
-            </p>
-          )}
-
-          {/* Waveform visualization when recording */}
-          {isRecording && !isPaused && (
-            <WaveformVisualizer />
-          )}
-
-          {/* Error message */}
-          {error && (
-            <Alert variant="error" className="mb-4 max-w-md">
-              {error}
-            </Alert>
-          )}
-
-          {/* Audio preview */}
-          {audioUrl && (
-            <div className="w-full max-w-md mb-6">
-              <audio src={audioUrl} controls className="w-full" />
-            </div>
-          )}
-
-          {/* Control buttons */}
-          <div className="flex flex-wrap justify-center gap-3">
-            {!isRecording && !audioUrl && (
-              <Button
-                variant="primary"
-                onClick={startRecording}
-                leftIcon={<MicrophoneIcon size={18} />}
-              >
-                {t("startRecording")}
-              </Button>
-            )}
-
-            {isRecording && (
-              <>
-                {isPaused ? (
-                  <Button
-                    variant="primary"
-                    onClick={resumeRecording}
-                    leftIcon={<MicrophoneIcon size={18} />}
-                    className="bg-gradient-to-r from-[#10b981] to-[#059669]"
-                  >
-                    {t("resumeRecording")}
-                  </Button>
-                ) : (
-                  <Button
-                    variant="secondary"
-                    onClick={pauseRecording}
-                    leftIcon={<WaveformIcon size={18} />}
-                  >
-                    {t("pauseRecording")}
-                  </Button>
-                )}
-                <Button
-                  variant="danger"
-                  onClick={stopRecording}
-                  leftIcon={<StopIcon size={18} />}
-                >
-                  {t("stopRecording")}
-                </Button>
-              </>
-            )}
-
-            {audioUrl && (
-              <>
-                <Button
-                  variant="primary"
-                  onClick={sendRecording}
-                  leftIcon={<SparklesIcon size={18} />}
-                >
-                  {t("processRecording")}
-                </Button>
-                <Button
-                  variant="ghost"
-                  onClick={() => setShowDiscardConfirm(true)}
-                  leftIcon={<XIcon size={18} />}
-                >
-                  {t("discardRecording")}
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={startRecording}
-                  leftIcon={<MicrophoneIcon size={18} />}
-                >
-                  {t("recordAgain")}
-                </Button>
-              </>
-            )}
-          </div>
-        </div>
-      </CardBody>
-
-      {/* Info footer */}
-      <div className="px-6 py-3 bg-[#f8fafc] dark:bg-[#0f172a] border-t border-[#e2e8f0] dark:border-[#334155] text-center">
-        <p className="text-xs text-[#94a3b8]">
-          {t("localProcessing")}
-        </p>
-      </div>
-
-      {/* Discard confirmation dialog */}
-      <ConfirmDialog
-        open={showDiscardConfirm}
-        title={String(t("confirmDiscardTitle"))}
-        message={String(t("confirmDiscardMessage"))}
-        confirmLabel={String(t("confirmDiscardAction"))}
-        cancelLabel={String(t("cancel"))}
-        onConfirm={() => {
-          setShowDiscardConfirm(false);
-          discardRecording();
-        }}
-        onCancel={() => setShowDiscardConfirm(false)}
-      />
-    </Card>
-  );
-};
-
-// ============================================
-// PROCESSING INDICATOR COMPONENT (memoized)
-// ============================================
-const ProcessingIndicator: React.FC = React.memo(() => {
-  const { t } = useLanguage();
-
-  return (
-    <div className="space-y-6">
-      {/* Processing steps indicator */}
-      <div className="flex items-center justify-center gap-8">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#2d96c6] to-[#1e7aa8] flex items-center justify-center">
-            <WaveformIcon className="text-white" size={16} />
-          </div>
-          <span className="text-sm font-medium text-[#2d96c6]">{t("transcribingStep")}</span>
-        </div>
-        <div className="w-8 h-0.5 bg-[#e2e8f0] dark:bg-[#334155] rounded" />
-        <div className="flex items-center gap-2 opacity-50">
-          <div className="w-8 h-8 rounded-lg bg-[#e2e8f0] dark:bg-[#334155] flex items-center justify-center">
-            <SparklesIcon className="text-[#94a3b8]" size={16} />
-          </div>
-          <span className="text-sm font-medium text-[#94a3b8]">{t("summarizingStep")}</span>
-        </div>
-      </div>
-
-      {/* Skeleton preview of the document card */}
-      <Card>
-        <CardHeader icon={<DocumentIcon className="text-white" size={20} />}>
-          <div>
-            <Skeleton width="60%" height={16} />
-            <Skeleton className="mt-2" width="40%" height={12} />
-          </div>
-        </CardHeader>
-        <CardBody>
-          <div className="space-y-3">
-            <Skeleton width="100%" height={14} />
-            <Skeleton width="95%" height={14} />
-            <Skeleton width="88%" height={14} />
-            <Skeleton width="92%" height={14} />
-            <div className="pt-2" />
-            <Skeleton width="100%" height={14} />
-            <Skeleton width="80%" height={14} />
-            <Skeleton width="96%" height={14} />
-            <Skeleton width="70%" height={14} />
-          </div>
-        </CardBody>
-      </Card>
-    </div>
-  );
-});
-
-ProcessingIndicator.displayName = 'ProcessingIndicator';
-
-// ============================================
-// RESULT CARD COMPONENT (memoized)
-// ============================================
-interface ResultCardProps {
-  title: string;
-  content: string | null;
-  icon: React.ReactNode;
-  gradientFrom: string;
-  gradientTo: string;
-  isPending: boolean;
-}
-
-const ResultCard: React.FC<ResultCardProps> = React.memo(({
-  title,
-  content,
-  icon,
-  gradientFrom,
-  gradientTo,
-  isPending,
-}) => {
-  const { t } = useLanguage();
-
-  return (
-    <Card className="h-full flex flex-col" hover>
-      <CardHeader icon={icon}>
-        <div>
-          <h2 className="font-semibold text-[#1e293b] dark:text-white">{title}</h2>
-          <p className="text-xs text-[#64748b] dark:text-[#94a3b8]">
-            {isPending ? t("processing") : t("generatedByAI")}
-          </p>
-        </div>
-      </CardHeader>
-      <CardBody className="flex-1">
-        {isPending ? (
-          <div className="space-y-3 py-2">
-            <Skeleton width="100%" height={14} />
-            <Skeleton width="92%" height={14} />
-            <Skeleton width="85%" height={14} />
-            <Skeleton width="96%" height={14} />
-            <Skeleton width="70%" height={14} />
-          </div>
-        ) : (
-          <div className="prose prose-sm max-w-none">
-            <p className="text-[#475569] dark:text-[#cbd5e1] leading-relaxed whitespace-pre-wrap">
-              {content}
-            </p>
-          </div>
-        )}
-      </CardBody>
-    </Card>
-  );
-});
-
-ResultCard.displayName = 'ResultCard';
-
-// ============================================
-// MAIN DASHBOARD COMPONENT
-// ============================================
 interface MainDashboardProps {
   onViewHistory?: () => void;
 }
 
 export default function MainDashboard({ onViewHistory }: MainDashboardProps) {
   const { t, language } = useLanguage();
-  const [fileName, setFileName] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [transcript, setTranscript] = useState<string | null>(null);
-  const [document, setDocument] = useState<string | null>(null);
-  const [originalDocument, setOriginalDocument] = useState<string | null>(null);
-  const [streamingContent, setStreamingContent] = useState<string>("");
+  const { profile } = useProfile();
+
+  const {
+    fileName,
+    isLoading,
+    isStreaming,
+    error,
+    document,
+    originalDocument,
+    streamingContent,
+    isRagEnhanced,
+    isSaved,
+    hasContent,
+    setDocument,
+    processFile,
+    clearAll,
+    restoreOriginal,
+    validateFile,
+  } = useSmartNoteStream();
+
   const [isDragActive, setIsDragActive] = useState(false);
-  const [isRagEnhanced, setIsRagEnhanced] = useState(false);
-  const [isSaved, setIsSaved] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [showOverwriteConfirm, setShowOverwriteConfirm] = useState(false);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
 
-  const { profile, getDocumentHeader, getDocumentFooter } = useProfile();
   const inputRef = useRef<HTMLInputElement | null>(null);
-
-  const processFileDirectly = useCallback(async (file: File) => {
-    const ext = getExt(file.name);
-    if (!ALLOWED_EXTS.has(ext)) {
-      setError("Please upload a valid audio file (WAV, MP3, M4A, OGG).");
-      return;
-    }
-
-    setFileName(file.name);
-    setIsLoading(true);
-    setIsStreaming(false);
-    setError(null);
-    setTranscript(null);
-    setDocument(null);
-    setStreamingContent("");
-    setIsRagEnhanced(false);
-    setIsSaved(false);
-
-    try {
-      // Step 1: Transcribe audio (pass UI language as transcription hint)
-      const tr = await transcribeAudio(file, language);
-      setTranscript(tr.text);
-
-      // Step 2: Generate RAG-enhanced summary with streaming
-      setIsLoading(false);
-      setIsStreaming(true);
-
-      const transcriptionText = tr.text;
-
-      await summarizeTextStreamRAG(
-        transcriptionText,
-        // onChunk: called for each token
-        (chunk) => {
-          setStreamingContent((prev) => prev + chunk);
-        },
-        // onComplete: called when generation is finished
-        (fullText) => {
-          // Combine header + generated content + footer
-          const fullDocument = `${getDocumentHeader(language)}
-
-${fullText}
-
-${getDocumentFooter(language)}`;
-          setDocument(fullDocument);
-          setOriginalDocument(fullDocument);
-          setIsStreaming(false);
-          setStreamingContent("");
-
-          // Auto-save consultation to history (fire-and-forget)
-          saveConsultation({
-            smartnote: fullText,
-            transcription: transcriptionText,
-            dentist_name: profile?.name || "",
-          }).then(() => {
-            setIsSaved(true);
-          }).catch((err) => {
-            console.warn("Failed to save consultation to history:", err);
-          });
-        },
-        // onRAGStatus: tells us if RAG knowledge was used
-        (ragEnhanced) => {
-          setIsRagEnhanced(ragEnhanced);
-        },
-        // onError: called on error
-        (err) => {
-          console.error(err);
-          setError(err.message);
-          setIsStreaming(false);
-          setStreamingContent("");
-        }
-      );
-    } catch (e) {
-      console.error(e);
-      setError(e instanceof Error ? e.message : "An error occurred. Please try again.");
-      setIsLoading(false);
-      setIsStreaming(false);
-    }
-  }, [getDocumentHeader, getDocumentFooter, profile, language]);
 
   // Gate file processing: confirm before overwriting existing document
   const handleFileIntent = useCallback((file: File) => {
-    const ext = getExt(file.name);
-    if (!ALLOWED_EXTS.has(ext)) {
-      setError("Please upload a valid audio file (WAV, MP3, M4A, OGG).");
-      return;
-    }
+    if (!validateFile(file)) return;
 
-    if (document || transcript) {
+    if (document) {
       setPendingFile(file);
       setShowOverwriteConfirm(true);
     } else {
-      processFileDirectly(file);
+      processFile(file);
     }
-  }, [document, transcript, processFileDirectly]);
+  }, [document, processFile, validateFile]);
+
+  const handleClearIntent = useCallback(() => {
+    if (document) {
+      setShowClearConfirm(true);
+    } else {
+      clearAll();
+    }
+  }, [document, clearAll]);
 
   const handleExportPDF = useCallback(() => {
     if (!document) return;
-
-    // Sanitize content to prevent XSS - escape HTML entities
-    const escapeHtml = (text: string): string => {
-      const htmlEntities: Record<string, string> = {
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-        "'": '&#039;'
-      };
-      return text.replace(/[&<>"']/g, (char) => htmlEntities[char] || char);
-    };
-
-    const sanitizedContent = escapeHtml(document).replace(/\n/g, '<br>');
-    const currentDate = new Date().toLocaleDateString(language === 'fr' ? 'fr-FR' : 'en-GB', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
+    exportPDF(document, profile, language, {
+      pdfTitle: String(t("pdfTitle")),
+      pdfDate: String(t("pdfDate")),
+      pdfConsultationNotes: String(t("pdfConsultationNotes")),
+      pdfDisclaimer: String(t("pdfDisclaimer")),
+      pdfConfidential: String(t("pdfConfidential")),
+      professionalTitlePlaceholder: String(t("professionalTitlePlaceholder")),
     });
-
-    // Create a printable window with professional layout
-    const printWindow = window.open('', '_blank');
-    if (printWindow) {
-      printWindow.document.write(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>${String(t("pdfTitle"))} - ${currentDate}</title>
-          <meta charset="UTF-8">
-          <style>
-            * {
-              margin: 0;
-              padding: 0;
-              box-sizing: border-box;
-            }
-
-            body {
-              font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-              line-height: 1.6;
-              color: #1e293b;
-              background: #fff;
-            }
-
-            .page {
-              max-width: 800px;
-              margin: 0 auto;
-              padding: 40px;
-            }
-
-            /* Header */
-            .header {
-              display: flex;
-              justify-content: space-between;
-              align-items: flex-start;
-              padding-bottom: 20px;
-              border-bottom: 3px solid #2d96c6;
-              margin-bottom: 30px;
-            }
-
-            .logo-section {
-              display: flex;
-              align-items: center;
-              gap: 15px;
-            }
-
-            .logo {
-              width: 60px;
-              height: 60px;
-              background: linear-gradient(135deg, #2d96c6, #28b5ad);
-              border-radius: 12px;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              color: white;
-              font-size: 28px;
-              font-weight: bold;
-            }
-
-            .practice-info h1 {
-              font-size: 22px;
-              font-weight: 700;
-              color: #1e293b;
-              margin-bottom: 4px;
-            }
-
-            .practice-info .title {
-              font-size: 14px;
-              color: #2d96c6;
-              font-weight: 500;
-            }
-
-            .contact-info {
-              text-align: right;
-              font-size: 13px;
-              color: #64748b;
-            }
-
-            .contact-info p {
-              margin-bottom: 3px;
-            }
-
-            /* Document Title */
-            .document-title {
-              background: linear-gradient(135deg, #f0f7fc, #effcfb);
-              border-radius: 12px;
-              padding: 20px;
-              margin-bottom: 25px;
-              text-align: center;
-            }
-
-            .document-title h2 {
-              font-size: 20px;
-              color: #2d96c6;
-              margin-bottom: 8px;
-            }
-
-            .document-title .date {
-              font-size: 14px;
-              color: #64748b;
-            }
-
-            /* Content */
-            .content-section {
-              margin-bottom: 30px;
-            }
-
-            .section-header {
-              display: flex;
-              align-items: center;
-              gap: 10px;
-              margin-bottom: 15px;
-              padding-bottom: 10px;
-              border-bottom: 2px solid #e2e8f0;
-            }
-
-            .section-icon {
-              width: 32px;
-              height: 32px;
-              background: linear-gradient(135deg, #2d96c6, #28b5ad);
-              border-radius: 8px;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              color: white;
-              font-size: 16px;
-            }
-
-            .section-header h3 {
-              font-size: 16px;
-              font-weight: 600;
-              color: #1e293b;
-            }
-
-            .content-box {
-              background: #f8fafc;
-              border: 1px solid #e2e8f0;
-              border-radius: 10px;
-              padding: 20px;
-              font-size: 14px;
-              line-height: 1.8;
-            }
-
-            /* Footer */
-            .footer {
-              margin-top: 40px;
-              padding-top: 20px;
-              border-top: 2px solid #e2e8f0;
-            }
-
-            .disclaimer {
-              background: #fef3c7;
-              border: 1px solid #fbbf24;
-              border-radius: 8px;
-              padding: 12px 16px;
-              font-size: 12px;
-              color: #92400e;
-              margin-bottom: 20px;
-            }
-
-            .confidential {
-              text-align: center;
-              font-size: 11px;
-              color: #94a3b8;
-              text-transform: uppercase;
-              letter-spacing: 2px;
-            }
-
-            @media print {
-              body {
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-              }
-              .page {
-                padding: 20px;
-                max-width: 100%;
-              }
-              .logo {
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-              }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="page">
-            <!-- Header -->
-            <div class="header">
-              <div class="logo-section">
-                <div class="logo">🦷</div>
-                <div class="practice-info">
-                  <h1>${profile?.name || 'Cabinet Dentaire'}</h1>
-                  <p class="title">${profile?.title || String(t("professionalTitlePlaceholder"))}</p>
-                </div>
-              </div>
-              <div class="contact-info">
-                ${profile?.address ? `<p>${escapeHtml(profile.address)}</p>` : ''}
-                ${profile?.phone ? `<p>📞 ${escapeHtml(profile.phone)}</p>` : ''}
-                ${profile?.email ? `<p>✉️ ${escapeHtml(profile.email)}</p>` : ''}
-              </div>
-            </div>
-
-            <!-- Document Title -->
-            <div class="document-title">
-              <h2>${String(t("pdfTitle"))}</h2>
-              <p class="date">${String(t("pdfDate"))}: ${currentDate}</p>
-            </div>
-
-            <!-- Content -->
-            <div class="content-section">
-              <div class="section-header">
-                <div class="section-icon">📋</div>
-                <h3>${String(t("pdfConsultationNotes"))}</h3>
-              </div>
-              <div class="content-box">
-                ${sanitizedContent}
-              </div>
-            </div>
-
-            <!-- Footer -->
-            <div class="footer">
-              <div class="disclaimer">
-                ⚠️ ${String(t("pdfDisclaimer"))}
-              </div>
-              <p class="confidential">${String(t("pdfConfidential"))}</p>
-            </div>
-          </div>
-        </body>
-        </html>
-      `);
-      printWindow.document.close();
-      printWindow.print();
-    }
-  }, [document, profile, t, language]);
+  }, [document, profile, language, t]);
 
   const onDrop = useCallback((evt: React.DragEvent<HTMLDivElement>) => {
     evt.preventDefault();
@@ -1101,37 +103,10 @@ ${getDocumentFooter(language)}`;
     setIsDragActive(false);
   }, []);
 
-  const doClearAll = useCallback(() => {
-    setFileName(null);
-    setError(null);
-    setTranscript(null);
-    setDocument(null);
-    setOriginalDocument(null);
-  }, []);
-
-  // Gate clearAll: confirm when there's a document to lose
-  const handleClearIntent = useCallback(() => {
-    if (document || transcript) {
-      setShowClearConfirm(true);
-    } else {
-      doClearAll();
-    }
-  }, [document, transcript, doClearAll]);
-
-  const restoreOriginalDocument = useCallback(() => {
-    if (originalDocument) {
-      setDocument(originalDocument);
-    }
-  }, [originalDocument]);
-
-  const hasContent = !!(transcript || document || error || isStreaming);
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#f8fafc] via-[#f0f7fc] to-[#f8fafc] dark:from-[#0f172a] dark:via-[#1e293b] dark:to-[#0f172a]">
-      {/* Header */}
       <Header onClear={handleClearIntent} hasContent={hasContent} onViewHistory={onViewHistory} />
 
-      {/* Main content */}
       <main className="py-8">
         <Container size="lg">
           <div className="space-y-8">
@@ -1176,108 +151,23 @@ ${getDocumentFooter(language)}`;
               </section>
             )}
 
-            {/* Streaming indicator - shows content as it's generated */}
+            {/* Streaming indicator */}
             {isStreaming && (
-              <section className="animate-fade-in">
-                <Card className="overflow-hidden">
-                  <CardHeader icon={<SparklesIcon className="text-white" size={20} />}>
-                    <div className="flex items-center gap-3">
-                      <div>
-                        <h2 className="font-semibold text-[#1e293b] dark:text-white">{t("generatingSmartNote")}</h2>
-                        <p className="text-xs text-[#64748b] dark:text-[#94a3b8]">{t("aiWriting")}</p>
-                      </div>
-                      <div className="flex gap-1">
-                        {[0, 1, 2].map((i) => (
-                          <div
-                            key={i}
-                            className="w-2 h-2 bg-[#2d96c6] rounded-full animate-bounce"
-                            style={{ animationDelay: `${i * 0.15}s` }}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardBody>
-                    <div className="min-h-[200px] p-4 bg-[#f8fafc] dark:bg-[#0f172a] rounded-xl border-2 border-[#e2e8f0] dark:border-[#334155]">
-                      <pre className="whitespace-pre-wrap text-[#1e293b] dark:text-[#e2e8f0] font-mono text-sm leading-relaxed">
-                        {streamingContent}
-                        <span className="inline-block w-2 h-4 bg-[#2d96c6] animate-pulse ml-1" />
-                      </pre>
-                    </div>
-                  </CardBody>
-                </Card>
-              </section>
+              <StreamingPreview content={streamingContent} />
             )}
 
-            {/* Document section */}
+            {/* Document editor */}
             {document && !isLoading && !isStreaming && (
-              <section className="animate-fade-in-up">
-                <Card className="overflow-hidden">
-                  <CardHeader icon={<DocumentIcon className="text-white" size={20} />}>
-                    <div className="flex items-center gap-3">
-                      <div>
-                        <h2 className="font-semibold text-[#1e293b] dark:text-white">{t("generatedDocument")}</h2>
-                        <p className="text-xs text-[#64748b] dark:text-[#94a3b8]">{t("editableBeforeExport")}</p>
-                      </div>
-                      {isRagEnhanced && (
-                        <Badge variant="success">
-                          <SparklesIcon size={12} />
-                          {t("ragEnhanced")}
-                        </Badge>
-                      )}
-                      {isSaved && (
-                        <Badge variant="neutral">
-                          {t("consultationSaved")}
-                        </Badge>
-                      )}
-                    </div>
-                  </CardHeader>
-                  <CardBody>
-                    <textarea
-                      value={document}
-                      onChange={(e) => setDocument(e.target.value)}
-                      className="w-full h-96 p-4 border-2 border-[#e2e8f0] dark:border-[#334155] rounded-xl bg-white dark:bg-[#0f172a] text-[#1e293b] dark:text-[#e2e8f0] font-mono text-sm leading-relaxed resize-y focus:border-[#2d96c6] focus:ring-2 focus:ring-[#2d96c6]/20 outline-none"
-                      placeholder={String(t("documentPlaceholder"))}
-                    />
-                  </CardBody>
-                </Card>
-
-                {/* Quick actions */}
-                <div className="mt-6 flex flex-wrap justify-center gap-4">
-                  <Button
-                    variant="primary"
-                    onClick={handleExportPDF}
-                    leftIcon={<DownloadIcon size={18} />}
-                  >
-                    {t("exportPDF")}
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    onClick={() => {
-                      if (document) {
-                        navigator.clipboard.writeText(document);
-                      }
-                    }}
-                  >
-                    {t("copyDocument")}
-                  </Button>
-                  {originalDocument && document !== originalDocument && (
-                    <Button
-                      variant="ghost"
-                      onClick={restoreOriginalDocument}
-                    >
-                      {t("restoreOriginal")}
-                    </Button>
-                  )}
-                  <Button
-                    variant="ghost"
-                    onClick={() => inputRef.current?.click()}
-                    leftIcon={<MicrophoneIcon size={18} />}
-                  >
-                    {t("newRecording")}
-                  </Button>
-                </div>
-              </section>
+              <SmartNoteEditor
+                document={document}
+                originalDocument={originalDocument}
+                isRagEnhanced={isRagEnhanced}
+                isSaved={isSaved}
+                onDocumentChange={setDocument}
+                onExportPDF={handleExportPDF}
+                onRestoreOriginal={restoreOriginal}
+                onNewRecording={() => inputRef.current?.click()}
+              />
             )}
 
             {/* Empty state hint */}
@@ -1339,7 +229,7 @@ ${getDocumentFooter(language)}`;
         cancelLabel={String(t("cancel"))}
         onConfirm={() => {
           setShowClearConfirm(false);
-          doClearAll();
+          clearAll();
         }}
         onCancel={() => setShowClearConfirm(false)}
       />
@@ -1355,7 +245,7 @@ ${getDocumentFooter(language)}`;
         onConfirm={() => {
           setShowOverwriteConfirm(false);
           if (pendingFile) {
-            processFileDirectly(pendingFile);
+            processFile(pendingFile);
             setPendingFile(null);
           }
         }}
