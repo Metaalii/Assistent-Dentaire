@@ -245,9 +245,3 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         response.headers["X-RateLimit-Limit"] = str(max_req)
         response.headers["X-RateLimit-Remaining"] = str(remaining)
         return response
-
-
-# ---------------------------------------------------------------------------
-# Backward-compatibility alias
-# ---------------------------------------------------------------------------
-SimpleRateLimitMiddleware = RateLimitMiddleware
