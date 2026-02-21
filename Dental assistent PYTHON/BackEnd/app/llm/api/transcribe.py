@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, File, Form, UploadFile
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 
+from app.audit import log_action
 from app.errors import (
     AppError,
     INPUT_MISSING_FILENAME,
@@ -99,6 +100,9 @@ async def transcribe_audio(
 
     tmp_path: Optional[str] = None
 
+    audit_request_id = request.headers.get("x-request-id", request_id)
+    audit_resource = f"audio:{getattr(file, 'filename', 'unknown')}"
+
     try:
         # 1) Write to a temp file with size cap (don't trust Content-Length)
         with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
@@ -116,9 +120,25 @@ async def transcribe_audio(
         whisper = get_whisper()
         text = await whisper.transcribe(tmp_path, language=language)
 
+        log_action(
+            action="TRANSCRIBE",
+            actor="local-user",
+            resource=audit_resource,
+            request_id=audit_request_id,
+            outcome="success",
+            detail=f"lang:{language or 'auto'}",
+        )
         return {"text": text, "request_id": request_id}
 
-    except AppError:
+    except AppError as exc:
+        log_action(
+            action="TRANSCRIBE",
+            actor="local-user",
+            resource=audit_resource,
+            request_id=audit_request_id,
+            outcome="failure",
+            detail=str(exc),
+        )
         raise
 
     except Exception:
@@ -127,6 +147,14 @@ async def transcribe_audio(
             INFERENCE_TRANSCRIPTION_FAILED.code,
             request_id,
             getattr(file, "filename", "N/A"),
+        )
+        log_action(
+            action="TRANSCRIBE",
+            actor="local-user",
+            resource=audit_resource,
+            request_id=audit_request_id,
+            outcome="failure",
+            detail=f"filename={getattr(file, 'filename', 'N/A')}",
         )
         raise AppError(
             INFERENCE_TRANSCRIPTION_FAILED,

@@ -1,17 +1,19 @@
 """
 Health-check, status & observability endpoints.
 
-GET /health     — quick liveness probe used by the Tauri frontend boot sequence.
-GET /llm/status — LLM inference queue status (concurrency, running, waiting).
-GET /metrics    — operational metrics: request counts, latency percentiles, recent errors.
-GET /workers/status — worker pool status: concurrency, running, queued per pool.
+GET /health          — quick liveness probe used by the Tauri frontend boot sequence.
+GET /llm/status      — LLM inference queue status (concurrency, running, waiting).
+GET /metrics         — operational metrics: request counts, latency percentiles, recent errors.
+GET /workers/status  — worker pool status: concurrency, running, queued per pool.
+GET /audit/recent    — most recent user-action audit log entries (requires API key).
 """
 
 import logging
 from pathlib import Path
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, Query
 
+from app.security import verify_api_key
 from app.config import (
     MODEL_CONFIGS,
     WHISPER_MODEL_PATH,
@@ -109,3 +111,20 @@ async def workers_status():
     from app.worker import WorkerPool
 
     return WorkerPool().status()
+
+
+@router.get("/audit/recent", dependencies=[Depends(verify_api_key)])
+async def audit_recent(n: int = Query(default=100, ge=1, le=500)):
+    """
+    Return the *n* most recent entries from the patient-data audit log.
+
+    Each entry records who performed an action (TRANSCRIBE, SUMMARIZE,
+    CONSULTATION_SAVE, CONSULTATION_SEARCH, CONSULTATION_EXPORT, …),
+    the resource affected, the outcome, and the correlated request ID.
+
+    The audit log is the authoritative record for compliance review.
+    """
+    from app.audit import read_recent
+
+    records = read_recent(n=n)
+    return {"records": records, "count": len(records)}

@@ -17,6 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
+from app.audit import log_action
 from app.config import RAG_DATA_DIR, get_llm_model_path
 from app.llm_config import build_rag_smartnote_prompt
 from app.sanitize import sanitize_input
@@ -138,7 +139,7 @@ async def rag_status():
 
 
 @router.post("/consultations/save", dependencies=[Depends(verify_api_key)])
-async def save_consultation(req: SaveConsultationRequest):
+async def save_consultation(req: SaveConsultationRequest, request: Request):
     """Save a completed SmartNote to the consultation archive."""
     if not _rag_available:
         return {"status": "rag_unavailable", "detail": "RAG system not available"}
@@ -146,21 +147,45 @@ async def save_consultation(req: SaveConsultationRequest):
     from app.rag.pipelines import DentalRAGPipeline
     from app.worker import WorkerPool
 
+    request_id = request.headers.get("x-request-id", "")
+    actor = req.dentist_name or "local-user"
+    resource = f"patient:{req.patient_id}" if req.patient_id else "patient:unknown"
+
     pipeline = DentalRAGPipeline()
-    return await WorkerPool().run(
-        "rag",
-        lambda: pipeline.save_consultation(
-            smartnote=req.smartnote,
-            transcription=req.transcription,
-            dentist_name=req.dentist_name,
-            consultation_type=req.consultation_type,
-            patient_id=req.patient_id,
-        ),
+    try:
+        result = await WorkerPool().run(
+            "rag",
+            lambda: pipeline.save_consultation(
+                smartnote=req.smartnote,
+                transcription=req.transcription,
+                dentist_name=req.dentist_name,
+                consultation_type=req.consultation_type,
+                patient_id=req.patient_id,
+            ),
+        )
+    except Exception as exc:
+        log_action(
+            action="CONSULTATION_SAVE",
+            actor=actor,
+            resource=resource,
+            request_id=request_id,
+            outcome="failure",
+            detail=str(exc),
+        )
+        raise
+    log_action(
+        action="CONSULTATION_SAVE",
+        actor=actor,
+        resource=resource,
+        request_id=request_id,
+        outcome="success",
+        detail=f"type:{req.consultation_type}" if req.consultation_type else "",
     )
+    return result
 
 
 @router.post("/consultations/search", dependencies=[Depends(verify_api_key)])
-async def search_consultations(req: SearchRequest):
+async def search_consultations(req: SearchRequest, request: Request):
     """Semantic search across past consultations."""
     if not _rag_available:
         return {"results": [], "detail": "RAG system not available"}
@@ -172,18 +197,38 @@ async def search_consultations(req: SearchRequest):
     if not sanitized_query:
         raise HTTPException(status_code=400, detail="Search query is empty or invalid.")
 
+    request_id = request.headers.get("x-request-id", "")
     pipeline = DentalRAGPipeline()
-    results = await WorkerPool().run(
-        "rag",
-        pipeline.search_consultations,
-        sanitized_query,
-        min(req.top_k, 50),
+    try:
+        results = await WorkerPool().run(
+            "rag",
+            pipeline.search_consultations,
+            sanitized_query,
+            min(req.top_k, 50),
+        )
+    except Exception as exc:
+        log_action(
+            action="CONSULTATION_SEARCH",
+            actor="local-user",
+            resource=f"query:{sanitized_query[:80]}",
+            request_id=request_id,
+            outcome="failure",
+            detail=str(exc),
+        )
+        raise
+    log_action(
+        action="CONSULTATION_SEARCH",
+        actor="local-user",
+        resource=f"query:{sanitized_query[:80]}",
+        request_id=request_id,
+        outcome="success",
+        detail=f"results:{len(results)}",
     )
     return {"results": results, "count": len(results)}
 
 
 @router.get("/consultations/export", dependencies=[Depends(verify_api_key)])
-async def export_consultations():
+async def export_consultations(request: Request):
     """
     Export every consultation from the durable JSONL journal.
 
@@ -192,7 +237,16 @@ async def export_consultations():
     """
     from app.rag.journal import read_all as journal_read_all
 
+    request_id = request.headers.get("x-request-id", "")
     records = journal_read_all()
+    log_action(
+        action="CONSULTATION_EXPORT",
+        actor="local-user",
+        resource="all-consultations",
+        request_id=request_id,
+        outcome="success",
+        detail=f"count:{len(records)}",
+    )
     return JSONResponse(
         content={"consultations": records, "count": len(records)},
         headers={
@@ -217,7 +271,7 @@ async def _get_rag_context(text: str) -> str:
 
 
 @router.post("/summarize-rag", dependencies=[Depends(verify_api_key)])
-async def summarize_with_rag(req: SummaryRequest):
+async def summarize_with_rag(req: SummaryRequest, request: Request):
     """
     Generate a RAG-enhanced SmartNote.
 
@@ -232,6 +286,7 @@ async def summarize_with_rag(req: SummaryRequest):
     if not sanitized_text:
         raise HTTPException(status_code=400, detail="Text input is empty or invalid.")
 
+    request_id = request.headers.get("x-request-id", "")
     rag_context = await _get_rag_context(sanitized_text)
 
     from app.llm.local_llm import LocalLLM
@@ -239,6 +294,14 @@ async def summarize_with_rag(req: SummaryRequest):
     llm = LocalLLM()
     prompt = build_rag_smartnote_prompt(sanitized_text, rag_context)
     summary = await llm.generate(prompt)
+    log_action(
+        action="SUMMARIZE_RAG",
+        actor="local-user",
+        resource="smartnote",
+        request_id=request_id,
+        outcome="success",
+        detail=f"rag_enhanced:{bool(rag_context)}",
+    )
     return {
         "summary": summary,
         "rag_enhanced": bool(rag_context),
@@ -262,6 +325,7 @@ async def summarize_stream_with_rag(req: SummaryRequest, request: Request):
     if not sanitized_text:
         raise HTTPException(status_code=400, detail="Text input is empty or invalid.")
 
+    request_id = request.headers.get("x-request-id", "")
     rag_context = await _get_rag_context(sanitized_text)
 
     from app.llm.local_llm import LocalLLM
@@ -270,6 +334,14 @@ async def summarize_stream_with_rag(req: SummaryRequest, request: Request):
     prompt = build_rag_smartnote_prompt(sanitized_text, rag_context)
     rag_enhanced = bool(rag_context)
     cancel = threading.Event()
+    log_action(
+        action="SUMMARIZE_STREAM_RAG",
+        actor="local-user",
+        resource="smartnote",
+        request_id=request_id,
+        outcome="success",
+        detail=f"rag_enhanced:{rag_enhanced}",
+    )
 
     async def event_generator():
         try:

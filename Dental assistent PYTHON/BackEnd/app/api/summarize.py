@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from app.audit import log_action
 from app.config import get_llm_model_path
 from app.llm_config import SMARTNOTE_PROMPT_OPTIMIZED
 from app.sanitize import sanitize_input
@@ -27,7 +28,7 @@ class SummaryRequest(BaseModel):
 
 
 @router.post("/summarize", dependencies=[Depends(verify_api_key)])
-async def summarize(req: SummaryRequest):
+async def summarize(req: SummaryRequest, request: Request):
     """
     Generate a SmartNote summary from transcribed text.
     Returns the complete summary when generation is finished.
@@ -39,11 +40,20 @@ async def summarize(req: SummaryRequest):
     if not sanitized_text:
         raise HTTPException(status_code=400, detail="Text input is empty or invalid.")
 
+    request_id = request.headers.get("x-request-id", "")
+
     from app.llm.local_llm import LocalLLM
 
     llm = LocalLLM()
     prompt = SMARTNOTE_PROMPT_OPTIMIZED.format(text=sanitized_text)
     summary = await llm.generate(prompt)
+    log_action(
+        action="SUMMARIZE",
+        actor="local-user",
+        resource="smartnote",
+        request_id=request_id,
+        outcome="success",
+    )
     return {"summary": summary}
 
 
@@ -70,6 +80,15 @@ async def summarize_stream(req: SummaryRequest, request: Request):
     llm = LocalLLM()
     prompt = SMARTNOTE_PROMPT_OPTIMIZED.format(text=sanitized_text)
     cancel = threading.Event()
+
+    request_id = request.headers.get("x-request-id", "")
+    log_action(
+        action="SUMMARIZE_STREAM",
+        actor="local-user",
+        resource="smartnote",
+        request_id=request_id,
+        outcome="success",
+    )
 
     async def event_generator():
         try:
