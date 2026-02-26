@@ -15,10 +15,16 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_hardware_info
+from app.errors import (
+    AppError,
+    app_error_handler,
+    generic_http_handler,
+    unhandled_error_handler,
+)
 from app.middleware import MaxRequestSizeMiddleware, RateLimitMiddleware
 from app.observability import RequestTracingMiddleware
 from app.security import check_api_key_configured, validate_security_config
@@ -71,6 +77,15 @@ async def lifespan(app: FastAPI):
 # ---------------------------------------------------------------------------
 
 app = FastAPI(title="Dental Assistant Backend", lifespan=lifespan)
+
+# ---------------------------------------------------------------------------
+# Exception handlers — must be registered before middleware so they can
+# intercept errors at every layer.  Order matters: more specific first.
+# ---------------------------------------------------------------------------
+
+app.add_exception_handler(AppError, app_error_handler)
+app.add_exception_handler(HTTPException, generic_http_handler)
+app.add_exception_handler(Exception, unhandled_error_handler)
 
 # ---------------------------------------------------------------------------
 # Middleware (evaluated bottom → top; order matters for CORS)

@@ -161,3 +161,59 @@ def client(tmp_path: Path):
     else:
         sys.modules.pop("app.llm.local_llm", None)
     WorkerPool._instance = None
+
+
+@pytest.fixture()
+def lenient_client(tmp_path: Path):
+    """
+    Same as ``client`` but with raise_server_exceptions=False.
+
+    Use this when testing that the server returns 500 for unhandled exceptions
+    rather than crashing.  Starlette's BaseHTTPMiddleware re-raises non-HTTP
+    exceptions through the middleware stack; the TestClient default
+    (raise_server_exceptions=True) surfaces them as test errors.  This fixture
+    uses raise_server_exceptions=False so the test sees the actual HTTP response
+    (500) instead of an exception, matching production behaviour.
+    """
+    from app.worker import WorkerPool
+    WorkerPool._instance = None
+
+    model_file = tmp_path / "fake-model.gguf"
+    model_file.write_bytes(b"\x00" * 1024)
+
+    hw_info = {
+        "profile": "cpu_only",
+        "gpu_detected": False,
+        "gpu_name": None,
+        "vram_gb": None,
+        "backend_gpu_support": False,
+        "detection_method": "test",
+    }
+
+    stub_mod = types.ModuleType("app.llm.local_llm")
+    stub_mod.LocalLLM = FakeLLM  # type: ignore[attr-defined]
+    stub_mod.PRIORITY_INTERACTIVE = 0  # type: ignore[attr-defined]
+    stub_mod.PRIORITY_BATCH = 10  # type: ignore[attr-defined]
+    saved = sys.modules.get("app.llm.local_llm")
+    sys.modules["app.llm.local_llm"] = stub_mod
+
+    with (
+        patch("app.config.get_llm_model_path", return_value=model_file),
+        patch("app.api.rag.get_llm_model_path", return_value=model_file),
+        patch("app.api.summarize.get_llm_model_path", return_value=model_file),
+        patch("app.api.rag.initialize_rag"),
+        patch("app.config.HardwareDetector.detect", return_value=hw_info),
+        patch("app.config.analyze_hardware", return_value="cpu_only"),
+        patch("app.api.health._is_model_valid", return_value=True),
+        patch("app.api.health._is_whisper_valid", return_value=True),
+    ):
+        from fastapi.testclient import TestClient
+        from main import app
+        with TestClient(app, raise_server_exceptions=False) as tc:
+            yield tc
+
+    if saved is not None:
+        sys.modules["app.llm.local_llm"] = saved
+    else:
+        sys.modules.pop("app.llm.local_llm", None)
+    WorkerPool._instance = None
