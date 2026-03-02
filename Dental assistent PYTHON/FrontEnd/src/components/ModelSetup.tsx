@@ -270,16 +270,11 @@ export default function ModelSetup({ onReady }: Props) {
         setProgress(100);
         setTimeout(onReady, 500);
       },
-      (errMsg, errCode) => {
-        if (errCode) {
-          const guidance = getErrorGuidance(errCode, lang);
-          setErrorCode(errCode);
-          setErrorMsg(guidance.title);
-          setErrorHint(guidance.hint);
-          setStep("error");
-        } else {
-          startFallbackPolling();
-        }
+      (errMsg) => {
+        // SSE connection dropped — fall back to polling so the download
+        // continues in the background and we detect completion via /check-models.
+        console.warn("LLM download SSE error, switching to polling:", errMsg);
+        startFallbackPolling();
       },
     );
   };
@@ -325,16 +320,10 @@ export default function ModelSetup({ onReady }: Props) {
               setTimeout(onReady, 500);
             }
           },
-          (errMsg, errCode) => {
-            if (errCode) {
-              const guidance = getErrorGuidance(errCode, lang);
-              setErrorCode(errCode);
-              setErrorMsg(guidance.title);
-              setErrorHint(guidance.hint);
-              setStep("error");
-            } else {
-              startFallbackPolling();
-            }
+          (errMsg) => {
+            // SSE connection dropped — fall back to polling.
+            console.warn("Whisper download SSE error, switching to polling:", errMsg);
+            startFallbackPolling();
           },
         );
       } else if (needsLLM) {
@@ -427,7 +416,7 @@ export default function ModelSetup({ onReady }: Props) {
             onClick={() => window.location.reload()}
             className="flex-1"
           >
-            {t("tryAgain")}
+            {t("reloadPage")}
           </Button>
         </div>
       </CardBody>

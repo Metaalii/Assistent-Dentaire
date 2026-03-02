@@ -84,6 +84,13 @@ const LiveRecorder: React.FC<LiveRecorderProps> = ({ onRecordingComplete, isProc
   const startRecording = async () => {
     try {
       setError(null);
+      // Discard any previous recording before starting a new one so the
+      // old object URL is revoked and the audio-ready button group is hidden.
+      if (audioUrlRef.current) {
+        URL.revokeObjectURL(audioUrlRef.current);
+        setAudioUrl(null);
+      }
+      chunksRef.current = [];
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
 

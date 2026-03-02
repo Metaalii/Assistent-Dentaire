@@ -77,6 +77,11 @@ export const translations = {
     // Errors
     processingError: "Processing Error",
     errorOccurred: "An error occurred",
+    errorBoundaryTitle: "An error occurred",
+    errorBoundaryMessage: "Something went wrong. Please retry or reload the page.",
+    technicalDetails: "Technical details",
+    reloadPage: "Reload page",
+    invalidAudioFormat: "Please upload a valid audio file (WAV, MP3, M4A, OGG, WEBM).",
 
     // Settings
     settings: "Settings",
@@ -287,6 +292,11 @@ export const translations = {
     // Errors
     processingError: "Erreur de Traitement",
     errorOccurred: "Une erreur s'est produite",
+    errorBoundaryTitle: "Une erreur est survenue",
+    errorBoundaryMessage: "Quelque chose s'est mal passé. Veuillez réessayer ou recharger la page.",
+    technicalDetails: "Détails techniques",
+    reloadPage: "Recharger la page",
+    invalidAudioFormat: "Veuillez télécharger un fichier audio valide (WAV, MP3, M4A, OGG, WEBM).",
 
     // Settings
     settings: "Paramètres",

@@ -202,19 +202,22 @@ export async function summarizeTextStream(
 
           if (!data) continue; // Skip empty data lines
 
+          // Parse JSON separately so backend error payloads are not swallowed.
+          let parsed: { chunk?: string; error?: string };
           try {
-            const parsed = JSON.parse(data);
-            if (parsed.chunk) {
-              fullText += parsed.chunk;
-              onChunk(parsed.chunk);
-            } else if (parsed.error) {
-              throw new Error(parsed.error);
-            }
-          } catch (parseErr) {
-            // Skip invalid JSON lines (could be partial data)
+            parsed = JSON.parse(data);
+          } catch {
             if (data.length > 0) {
               console.warn("Failed to parse SSE data:", data);
             }
+            continue;
+          }
+
+          if (parsed.error) {
+            throw new Error(parsed.error);
+          } else if (parsed.chunk) {
+            fullText += parsed.chunk;
+            onChunk(parsed.chunk);
           }
         }
       }
@@ -283,7 +286,9 @@ export function subscribeDownloadProgress(
 
   (async () => {
     try {
+      const headers = await authHeaders();
       const res = await fetch(`${BASE_URL}/setup/download-progress`, {
+        headers,
         signal: controller.signal,
       });
       if (!res.ok) {
@@ -367,7 +372,9 @@ export function subscribeWhisperProgress(
 
   (async () => {
     try {
+      const headers = await authHeaders();
       const res = await fetch(`${BASE_URL}/setup/whisper-download-progress`, {
+        headers,
         signal: controller.signal,
       });
       if (!res.ok) {
@@ -566,20 +573,24 @@ export async function summarizeTextStreamRAG(
 
           if (!data) continue;
 
+          // Parse JSON separately so backend error payloads are not swallowed.
+          let parsed: { chunk?: string; error?: string; rag_enhanced?: boolean };
           try {
-            const parsed = JSON.parse(data);
-            if (parsed.rag_enhanced !== undefined && onRAGStatus) {
-              onRAGStatus(parsed.rag_enhanced);
-            } else if (parsed.chunk) {
-              fullText += parsed.chunk;
-              onChunk(parsed.chunk);
-            } else if (parsed.error) {
-              throw new Error(parsed.error);
-            }
-          } catch (parseErr) {
-            if (data.length > 0 && !data.startsWith("{")) {
+            parsed = JSON.parse(data);
+          } catch {
+            if (data.length > 0) {
               console.warn("Failed to parse SSE data:", data);
             }
+            continue;
+          }
+
+          if (parsed.error) {
+            throw new Error(parsed.error);
+          } else if (parsed.rag_enhanced !== undefined && onRAGStatus) {
+            onRAGStatus(parsed.rag_enhanced);
+          } else if (parsed.chunk) {
+            fullText += parsed.chunk;
+            onChunk(parsed.chunk);
           }
         }
       }

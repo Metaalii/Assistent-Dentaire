@@ -50,7 +50,7 @@ export function useSmartNoteStream(): SmartNoteStreamState {
 
   const processFile = useCallback(async (file: File) => {
     if (!validateFile(file)) {
-      setError("Please upload a valid audio file (WAV, MP3, M4A, OGG).");
+      setError(String(t("invalidAudioFormat")));
       return;
     }
 
@@ -115,7 +115,7 @@ ${getDocumentFooter(language)}`;
       setIsLoading(false);
       setIsStreaming(false);
     }
-  }, [getDocumentHeader, getDocumentFooter, profile, language, validateFile]);
+  }, [getDocumentHeader, getDocumentFooter, profile, language, validateFile, t]);
 
   const clearAll = useCallback(() => {
     setFileName(null);
@@ -123,6 +123,11 @@ ${getDocumentFooter(language)}`;
     setTranscript(null);
     setDocument(null);
     setOriginalDocument(null);
+    setIsLoading(false);
+    setIsStreaming(false);
+    setStreamingContent("");
+    setIsRagEnhanced(false);
+    setIsSaved(false);
   }, []);
 
   const restoreOriginal = useCallback(() => {
