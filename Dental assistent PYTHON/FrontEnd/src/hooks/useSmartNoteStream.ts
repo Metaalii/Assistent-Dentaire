@@ -30,7 +30,7 @@ export interface SmartNoteStreamState {
 }
 
 export function useSmartNoteStream(): SmartNoteStreamState {
-  const { language } = useLanguage();
+  const { language, t } = useLanguage();
   const { profile, getDocumentHeader, getDocumentFooter } = useProfile();
 
   const [fileName, setFileName] = useState<string | null>(null);

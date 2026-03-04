@@ -144,6 +144,114 @@ export async function summarizeText(text: string): Promise<SummarizeResponse> {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Shared SSE helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Read a streaming SSE response body, calling `onData` for each parsed JSON
+ * payload.  Returns when a `[DONE]` sentinel is received or the stream ends.
+ * Throws on backend-reported errors (`parsed.error`).
+ */
+async function readSSEStream<T extends { chunk?: string; error?: string }>(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  onData: (parsed: T) => boolean, // return true to stop early
+): Promise<void> {
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  const processLine = (line: string): boolean => {
+    if (!line.startsWith("data: ")) return false;
+    const data = line.slice(6).trim();
+    if (data === "[DONE]") return true; // signal stop
+    if (!data) return false;
+
+    let parsed: T;
+    try {
+      parsed = JSON.parse(data) as T;
+    } catch {
+      if (data.length > 0) console.warn("Failed to parse SSE data:", data);
+      return false;
+    }
+
+    if (parsed.error) throw new Error(parsed.error);
+    return onData(parsed);
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() || "";
+
+    for (const line of lines) {
+      if (processLine(line)) return;
+    }
+  }
+
+  // Flush any remaining buffered line
+  if (buffer.trim()) processLine(buffer.trim());
+}
+
+/**
+ * Subscribe to a progress SSE endpoint.
+ * Returns an abort function to close the connection.
+ */
+function subscribeProgressSSE<T extends { done?: boolean; error?: string }>(
+  endpoint: string,
+  onProgress: (p: T) => void,
+  onDone: () => void,
+  onError: (err: string) => void,
+): () => void {
+  const controller = new AbortController();
+
+  (async () => {
+    try {
+      const headers = await authHeaders();
+      const res = await fetch(`${BASE_URL}${endpoint}`, {
+        headers,
+        signal: controller.signal,
+      });
+      if (!res.ok) { onError(`SSE connection failed: ${res.status}`); return; }
+
+      const reader = res.body?.getReader();
+      if (!reader) { onError("No response body"); return; }
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const raw = line.slice(6).trim();
+          if (!raw) continue;
+          try {
+            const data = JSON.parse(raw) as T;
+            if (data.error) { onError(data.error); return; }
+            onProgress(data);
+            if (data.done) { onDone(); return; }
+          } catch { /* skip malformed */ }
+        }
+      }
+    } catch (err) {
+      if (!controller.signal.aborted) {
+        onError(err instanceof Error ? err.message : String(err));
+      }
+    }
+  })();
+
+  return () => controller.abort();
+}
+
 /**
  * Stream SmartNote generation using Server-Sent Events (SSE).
  * Provides real-time feedback as tokens are generated.
@@ -168,89 +276,20 @@ export async function summarizeTextStream(
       body: JSON.stringify({ text }),
     });
 
-    if (!res.ok) {
-      throw new Error(await safeError(res));
-    }
+    if (!res.ok) throw new Error(await safeError(res));
 
     const reader = res.body?.getReader();
-    if (!reader) {
-      throw new Error("No response body");
-    }
+    if (!reader) throw new Error("No response body");
 
-    const decoder = new TextDecoder();
     let fullText = "";
-    let buffer = "";
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-
-      // Process complete SSE messages
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || ""; // Keep incomplete line in buffer
-
-      for (const line of lines) {
-        if (line.startsWith("data: ")) {
-          const data = line.slice(6).trim();
-
-          if (data === "[DONE]") {
-            onComplete(fullText);
-            return;
-          }
-
-          if (!data) continue; // Skip empty data lines
-
-          // Parse JSON separately so backend error payloads are not swallowed.
-          let parsed: { chunk?: string; error?: string };
-          try {
-            parsed = JSON.parse(data);
-          } catch {
-            if (data.length > 0) {
-              console.warn("Failed to parse SSE data:", data);
-            }
-            continue;
-          }
-
-          if (parsed.error) {
-            throw new Error(parsed.error);
-          } else if (parsed.chunk) {
-            fullText += parsed.chunk;
-            onChunk(parsed.chunk);
-          }
-        }
-      }
-    }
-
-    // Process any remaining data in the buffer before completing
-    if (buffer.trim()) {
-      const remainingLine = buffer.trim();
-      if (remainingLine.startsWith("data: ")) {
-        const data = remainingLine.slice(6).trim();
-        if (data && data !== "[DONE]") {
-          try {
-            const parsed = JSON.parse(data);
-            if (parsed.chunk) {
-              fullText += parsed.chunk;
-              onChunk(parsed.chunk);
-            }
-          } catch {
-            // Ignore parse errors for remaining buffer
-          }
-        }
-      }
-    }
-
-    // If we exit the loop without [DONE], still complete
+    await readSSEStream<{ chunk?: string; error?: string }>(reader, (parsed) => {
+      if (parsed.chunk) { fullText += parsed.chunk; onChunk(parsed.chunk); }
+      return false;
+    });
     onComplete(fullText);
   } catch (err) {
     const error = err instanceof Error ? err : new Error(String(err));
-    if (onError) {
-      onError(error);
-    } else {
-      throw error;
-    }
+    if (onError) onError(error); else throw error;
   }
 }
 
@@ -282,53 +321,7 @@ export function subscribeDownloadProgress(
   onDone: () => void,
   onError: (err: string) => void,
 ): () => void {
-  const controller = new AbortController();
-
-  (async () => {
-    try {
-      const headers = await authHeaders();
-      const res = await fetch(`${BASE_URL}/setup/download-progress`, {
-        headers,
-        signal: controller.signal,
-      });
-      if (!res.ok) {
-        onError(`SSE connection failed: ${res.status}`);
-        return;
-      }
-      const reader = res.body?.getReader();
-      if (!reader) { onError("No response body"); return; }
-
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          const raw = line.slice(6).trim();
-          if (!raw) continue;
-          try {
-            const data: DownloadProgress = JSON.parse(raw);
-            if (data.error) { onError(data.error); return; }
-            onProgress(data);
-            if (data.done) { onDone(); return; }
-          } catch { /* skip malformed */ }
-        }
-      }
-    } catch (err) {
-      if (!controller.signal.aborted) {
-        onError(err instanceof Error ? err.message : String(err));
-      }
-    }
-  })();
-
-  return () => controller.abort();
+  return subscribeProgressSSE<DownloadProgress>("/setup/download-progress", onProgress, onDone, onError);
 }
 
 export async function downloadModel(): Promise<{ status: string }> {
@@ -368,53 +361,7 @@ export function subscribeWhisperProgress(
   onDone: () => void,
   onError: (err: string) => void,
 ): () => void {
-  const controller = new AbortController();
-
-  (async () => {
-    try {
-      const headers = await authHeaders();
-      const res = await fetch(`${BASE_URL}/setup/whisper-download-progress`, {
-        headers,
-        signal: controller.signal,
-      });
-      if (!res.ok) {
-        onError(`SSE connection failed: ${res.status}`);
-        return;
-      }
-      const reader = res.body?.getReader();
-      if (!reader) { onError("No response body"); return; }
-
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          const raw = line.slice(6).trim();
-          if (!raw) continue;
-          try {
-            const data: WhisperDownloadProgress = JSON.parse(raw);
-            if (data.error) { onError(data.error); return; }
-            onProgress(data);
-            if (data.done) { onDone(); return; }
-          } catch { /* skip malformed */ }
-        }
-      }
-    } catch (err) {
-      if (!controller.signal.aborted) {
-        onError(err instanceof Error ? err.message : String(err));
-      }
-    }
-  })();
-
-  return () => controller.abort();
+  return subscribeProgressSSE<WhisperDownloadProgress>("/setup/whisper-download-progress", onProgress, onDone, onError);
 }
 
 // ---------------------------------------------------------------------------
@@ -540,89 +487,21 @@ export async function summarizeTextStreamRAG(
       body: JSON.stringify({ text }),
     });
 
-    if (!res.ok) {
-      throw new Error(await safeError(res));
-    }
+    if (!res.ok) throw new Error(await safeError(res));
 
     const reader = res.body?.getReader();
-    if (!reader) {
-      throw new Error("No response body");
-    }
+    if (!reader) throw new Error("No response body");
 
-    const decoder = new TextDecoder();
     let fullText = "";
-    let buffer = "";
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
-
-      for (const line of lines) {
-        if (line.startsWith("data: ")) {
-          const data = line.slice(6).trim();
-
-          if (data === "[DONE]") {
-            onComplete(fullText);
-            return;
-          }
-
-          if (!data) continue;
-
-          // Parse JSON separately so backend error payloads are not swallowed.
-          let parsed: { chunk?: string; error?: string; rag_enhanced?: boolean };
-          try {
-            parsed = JSON.parse(data);
-          } catch {
-            if (data.length > 0) {
-              console.warn("Failed to parse SSE data:", data);
-            }
-            continue;
-          }
-
-          if (parsed.error) {
-            throw new Error(parsed.error);
-          } else if (parsed.rag_enhanced !== undefined && onRAGStatus) {
-            onRAGStatus(parsed.rag_enhanced);
-          } else if (parsed.chunk) {
-            fullText += parsed.chunk;
-            onChunk(parsed.chunk);
-          }
-        }
-      }
-    }
-
-    // Process remaining buffer
-    if (buffer.trim()) {
-      const remainingLine = buffer.trim();
-      if (remainingLine.startsWith("data: ")) {
-        const data = remainingLine.slice(6).trim();
-        if (data && data !== "[DONE]") {
-          try {
-            const parsed = JSON.parse(data);
-            if (parsed.chunk) {
-              fullText += parsed.chunk;
-              onChunk(parsed.chunk);
-            }
-          } catch {
-            // Ignore
-          }
-        }
-      }
-    }
-
+    await readSSEStream<{ chunk?: string; error?: string; rag_enhanced?: boolean }>(reader, (parsed) => {
+      if (parsed.rag_enhanced !== undefined && onRAGStatus) onRAGStatus(parsed.rag_enhanced);
+      else if (parsed.chunk) { fullText += parsed.chunk; onChunk(parsed.chunk); }
+      return false;
+    });
     onComplete(fullText);
   } catch (err) {
     const error = err instanceof Error ? err : new Error(String(err));
-    if (onError) {
-      onError(error);
-    } else {
-      throw error;
-    }
+    if (onError) onError(error); else throw error;
   }
 }
 

@@ -58,6 +58,11 @@ def log_action(
 
     Never raises — audit failures are logged but must not abort the request
     that triggered them.
+
+    **PHI warning**: ``detail`` must contain only short error codes or
+    technical context (e.g. ``"MODEL_NOT_FOUND"``).  Never pass raw patient
+    text, transcription content, or any free-form clinical data here — this
+    log is append-only and cannot be redacted.
     """
     record = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -66,7 +71,9 @@ def log_action(
         "resource": resource,
         "request_id": request_id,
         "outcome": outcome,
-        "detail": detail[:500] if detail else "",
+        # Capped at 200 chars to prevent accidental PHI leakage via
+        # exception messages that may echo back patient-supplied content.
+        "detail": detail[:200] if detail else "",
     }
     try:
         _write(record, path=path or _default_path())
