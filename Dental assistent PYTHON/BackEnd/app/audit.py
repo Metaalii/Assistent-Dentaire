@@ -108,7 +108,13 @@ def read_recent(n: int = 100, *, path: Path | None = None) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 def _write(record: dict, *, path: Path) -> None:
+    # Create the directory with owner-only permissions (0o700) so that no
+    # other local user can list or enter it — the audit log contains PHI.
     path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        path.parent.chmod(0o700)
+    except OSError:
+        pass  # best-effort; Windows may not support POSIX chmod
     line = json.dumps(record, ensure_ascii=False) + "\n"
 
     with _write_lock:

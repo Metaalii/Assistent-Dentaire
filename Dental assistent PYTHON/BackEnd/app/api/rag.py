@@ -352,9 +352,9 @@ async def summarize_stream_with_rag(req: SummaryRequest, request: Request):
                     break
                 yield f"data: {json.dumps({'chunk': chunk})}\n\n"
             yield "data: [DONE]\n\n"
-        except Exception as e:
-            logger.exception("RAG streaming error")
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+        except Exception:
+            logger.exception("RAG streaming error [request_id=%s]", request_id)
+            yield f"data: {json.dumps({'error': 'Generation failed. Please try again.'})}\n\n"
 
     return StreamingResponse(
         event_generator(),

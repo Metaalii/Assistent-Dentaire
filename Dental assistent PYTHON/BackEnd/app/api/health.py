@@ -57,7 +57,7 @@ def _is_whisper_valid() -> bool:
     return True
 
 
-@router.get("/health")
+@router.get("/health", dependencies=[Depends(verify_api_key)])
 async def health():
     profile = analyze_hardware()
     cfg = MODEL_CONFIGS[profile]
@@ -68,7 +68,7 @@ async def health():
     return {"status": "ok", "models_ready": models_ready, "whisper_ready": whisper_ready}
 
 
-@router.get("/llm/status")
+@router.get("/llm/status", dependencies=[Depends(verify_api_key)])
 async def llm_status():
     """
     Return the LLM inference queue status.
@@ -85,7 +85,7 @@ async def llm_status():
     return llm.get_queue_status()
 
 
-@router.get("/metrics")
+@router.get("/metrics", dependencies=[Depends(verify_api_key)])
 async def metrics():
     """
     Operational metrics snapshot.
@@ -99,7 +99,7 @@ async def metrics():
     return get_metrics()
 
 
-@router.get("/workers/status")
+@router.get("/workers/status", dependencies=[Depends(verify_api_key)])
 async def workers_status():
     """
     Combined worker pool status across all heavy-task pools.

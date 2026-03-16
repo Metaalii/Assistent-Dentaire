@@ -58,6 +58,12 @@ RAG_DATA_DIR = user_data_dir() / "rag_data"
 def ensure_models_dir() -> Path:
     """Create MODELS_DIR on disk if it doesn't exist yet. Returns the path."""
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
+    # Restrict to owner-only: models contain no PHI but the parent data dir
+    # should not be world-traversable (audit log lives there too).
+    try:
+        MODELS_DIR.parent.chmod(0o700)
+    except OSError:
+        pass  # best-effort; no-op on Windows
     return MODELS_DIR
 
 # ============================================

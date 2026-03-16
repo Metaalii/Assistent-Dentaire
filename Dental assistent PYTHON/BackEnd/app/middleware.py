@@ -7,6 +7,7 @@ RateLimitMiddleware        — tiered, sliding-window rate limiter backed by
                              OS processes (e.g. uvicorn --workers N).
 """
 
+import hashlib
 import logging
 import os
 import sqlite3
@@ -305,6 +306,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             self._store = None
             logger.info("Rate limiting disabled via RATE_LIMIT_ENABLED=0")
 
+    @staticmethod
+    def _key_hash(api_key: str) -> str:
+        """Return a short opaque identifier for an API key (never the key itself)."""
+        return hashlib.sha256(api_key.encode()).hexdigest()[:16]
+
     async def dispatch(self, request: Request, call_next) -> Response:
         if not self.enabled:
             return await call_next(request)
@@ -315,29 +321,58 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         client_ip = request.client.host if request.client else "unknown"
         tier = _classify(request.url.path)
-        bucket = f"{client_ip}:{tier}"
         now = time.time()
 
         # Periodic vacuum of expired rows
         self._store.vacuum(now)
 
         max_req, window = self._limits[tier]
-        allowed, remaining, retry_after = self._store.allow(bucket, max_req, window, now)
 
-        if not allowed:
+        # --- Per-IP bucket (existing defence) ---
+        ip_bucket = f"ip:{client_ip}:{tier}"
+        allowed_ip, remaining_ip, retry_after_ip = self._store.allow(
+            ip_bucket, max_req, window, now
+        )
+
+        if not allowed_ip:
             logger.warning(
-                "Rate limit exceeded: %s on %s (tier=%s, limit=%d)",
+                "Rate limit (IP) exceeded: %s on %s (tier=%s, limit=%d)",
                 client_ip, request.url.path, tier, max_req,
             )
             return PlainTextResponse(
                 "Too Many Requests",
                 status_code=429,
                 headers={
-                    "Retry-After": str(int(retry_after) + 1),
+                    "Retry-After": str(int(retry_after_ip) + 1),
                     "X-RateLimit-Limit": str(max_req),
                     "X-RateLimit-Remaining": "0",
                 },
             )
+
+        # --- Per-API-key bucket (defence against IP rotation) ---
+        raw_api_key = request.headers.get("X-API-Key", "")
+        if raw_api_key:
+            key_bucket = f"key:{self._key_hash(raw_api_key)}:{tier}"
+            allowed_key, remaining_key, retry_after_key = self._store.allow(
+                key_bucket, max_req, window, now
+            )
+            if not allowed_key:
+                logger.warning(
+                    "Rate limit (key) exceeded on %s (tier=%s, limit=%d)",
+                    request.url.path, tier, max_req,
+                )
+                return PlainTextResponse(
+                    "Too Many Requests",
+                    status_code=429,
+                    headers={
+                        "Retry-After": str(int(retry_after_key) + 1),
+                        "X-RateLimit-Limit": str(max_req),
+                        "X-RateLimit-Remaining": "0",
+                    },
+                )
+            remaining = min(remaining_ip, remaining_key)
+        else:
+            remaining = remaining_ip
 
         response = await call_next(request)
         response.headers["X-RateLimit-Limit"] = str(max_req)

@@ -65,13 +65,10 @@ export function invalidateCache(key?: string): void {
   else _cache.clear();
 }
 
-// Default development API key for local development
-// This is safe because the app runs entirely on localhost
-const DEFAULT_DEV_KEY = "dental-assistant-local-dev-key";
-
-// Use environment variable for dev API key, or fall back to default for local development
-// In production Tauri app, API key comes from the backend
-const DEV_API_KEY = import.meta.env.VITE_DEV_API_KEY || DEFAULT_DEV_KEY;
+// In browser dev mode, the API key must be set via VITE_DEV_API_KEY in .env.local.
+// The backend prints the ephemeral key to stdout on startup when APP_API_KEY is
+// not configured — copy that value here.  No hardcoded fallback is used.
+const DEV_API_KEY: string = import.meta.env.VITE_DEV_API_KEY ?? "";
 
 let cachedKey: string | null = null;
 
@@ -79,13 +76,21 @@ async function getApiKey(): Promise<string> {
   if (cachedKey) return cachedKey;
 
   try {
-    // Try Tauri invoke first (works in desktop app)
+    // In the packaged Tauri desktop app, retrieve the key from the Rust shell.
     const key = await invoke<string>("get_api_config");
     cachedKey = key;
     return key;
   } catch {
-    // Fallback to dev key when running in browser (local development)
-    console.warn("Tauri not available, using development API key");
+    // Browser / dev mode: rely on VITE_DEV_API_KEY from .env.local.
+    if (!DEV_API_KEY) {
+      console.error(
+        "[dental-assistant] No API key available.\n" +
+        "Set VITE_DEV_API_KEY in FrontEnd/.env.local.\n" +
+        "The backend prints the ephemeral key to stdout on startup."
+      );
+    } else {
+      console.warn("[dental-assistant] Tauri not available — using VITE_DEV_API_KEY.");
+    }
     cachedKey = DEV_API_KEY;
     return DEV_API_KEY;
   }

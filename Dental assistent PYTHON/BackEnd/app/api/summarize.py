@@ -98,9 +98,11 @@ async def summarize_stream(req: SummaryRequest, request: Request):
                     break
                 yield f"data: {json.dumps({'chunk': chunk})}\n\n"
             yield "data: [DONE]\n\n"
-        except Exception as e:
-            logger.exception("Streaming error")
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+        except Exception:
+            # Log the full exception server-side (with request_id for correlation)
+            # but never echo internal details back to the client.
+            logger.exception("Streaming error [request_id=%s]", request_id)
+            yield f"data: {json.dumps({'error': 'Generation failed. Please try again.'})}\n\n"
 
     return StreamingResponse(
         event_generator(),

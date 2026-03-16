@@ -27,6 +27,34 @@ logger = logging.getLogger("dental_assistant.transcribe")
 ALLOWED_EXTENSIONS = {".wav", ".mp3", ".m4a", ".ogg", ".webm", ".mp4"}
 MAX_UPLOAD_BYTES = 100 * 1024 * 1024  # 100MB (aligns with middleware)
 
+# Audio format magic-byte signatures.
+# Each entry: (offset, bytes_to_match)
+# A file passes if ANY matching rule fires (OR logic within a format group).
+_AUDIO_MAGIC: list[tuple[int, bytes]] = [
+    # WAV: "RIFF" at 0, "WAVE" at 8
+    (0, b"RIFF"),
+    # OGG (including OGG Vorbis and Opus)
+    (0, b"OggS"),
+    # FLAC
+    (0, b"fLaC"),
+    # MP3 with ID3 tag
+    (0, b"ID3"),
+    # MP3 without ID3: sync word (0xFF 0xFB / 0xFA / 0xF3 / 0xF2 / 0xE3)
+    (0, b"\xff\xfb"),
+    (0, b"\xff\xfa"),
+    (0, b"\xff\xf3"),
+    (0, b"\xff\xf2"),
+    (0, b"\xff\xe3"),
+    # WEBM / MKV: EBML header
+    (0, b"\x1a\x45\xdf\xa3"),
+    # MP4 / M4A: "ftyp" box at byte 4
+    (4, b"ftyp"),
+    # AIFF
+    (0, b"FORM"),
+]
+
+_MAGIC_READ_BYTES = 12  # enough to cover all signatures above
+
 
 # Lazily create singleton so importing this module doesn't load heavy models
 _whisper = None
@@ -42,16 +70,41 @@ def get_whisper():
     return _whisper
 
 
+def _check_magic_bytes(file_obj) -> bool:
+    """
+    Read the first _MAGIC_READ_BYTES bytes and check against known audio
+    format signatures.  Seeks back to position 0 afterwards.
+    Returns True if the content looks like a supported audio format.
+    """
+    header = file_obj.read(_MAGIC_READ_BYTES)
+    file_obj.seek(0)
+    for offset, signature in _AUDIO_MAGIC:
+        end = offset + len(signature)
+        if len(header) >= end and header[offset:end] == signature:
+            return True
+    return False
+
+
 def _validate_upload(file: UploadFile) -> str:
     if not file.filename:
         raise AppError(INPUT_MISSING_FILENAME)
 
+    # 1. Extension whitelist — first, cheap check
     ext = Path(file.filename).suffix.lower()
     if ext not in ALLOWED_EXTENSIONS:
         raise AppError(
             INPUT_UNSUPPORTED_EXT,
             detail=f"Got '{ext}'. Allowed: {sorted(ALLOWED_EXTENSIONS)}",
         )
+
+    # 2. Magic bytes — verify actual file content matches a known audio format.
+    #    Prevents extension-spoofing attacks (e.g. malware.sh renamed to .wav).
+    if not _check_magic_bytes(file.file):
+        raise AppError(
+            INPUT_UNSUPPORTED_EXT,
+            detail="File content does not match a supported audio format.",
+        )
+
     return ext
 
 
